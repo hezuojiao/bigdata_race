@@ -10,8 +10,14 @@ int main(int argc, char** argv) {
 
   typedef std::chrono::duration<float> float_seconds;
   auto start = std::chrono::system_clock::now();
-  leftTable->buildTable(argv[1], argv[2]);
-  rightTable->buildTable(argv[3]);
+  std::thread thread1 = std::thread([leftTable, argv] {
+    leftTable->buildTable(argv[1], argv[2]);
+  });
+  std::thread thread2 = std::thread([rightTable, argv] {
+    rightTable->buildTable(argv[3]);
+  });
+  thread1.join();
+  thread2.join();
   auto end = std::chrono::system_clock::now();
   auto dur = end - start;
   auto secs = std::chrono::duration_cast<float_seconds>(dur);

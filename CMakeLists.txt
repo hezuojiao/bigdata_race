@@ -20,3 +20,6 @@ add_executable(
   src/ReadBuffer.h
   src/RightTable.h
 )
+
+find_package(Threads REQUIRED)
+target_link_libraries(bigdata_race Threads::Threads)
