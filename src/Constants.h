@@ -16,6 +16,8 @@ const int ORDER    = 150000000;
 
 const int BUFFER_SIZE = 64 * 1024; // 64kb
 
+const int CORE_NUM = 16;
+
 
 // {'BUILDING': 1, 'AUTOMOBILE': 1, 'HOUSEHOLD': 1, 'MACHINERY': 1, 'FURNITURE': 1}
 

@@ -5,37 +5,38 @@
 #ifndef BIGDATA_RACE_QUERYEXCUTOR_H
 #define BIGDATA_RACE_QUERYEXCUTOR_H
 
+#include <cstring>
+#include <queue>
+
 #include "LeftTable.h"
 #include "RightTable.h"
-#include <cstring>
 
 class Executor {
  private:
   int topn;
   int* c1Result;
   int* c2Result;
-  double* c3Result;
+  int* c3Result;
 
   std::vector<int> o_orderkey;
   std::vector<int> o_orderdate;
-  std::vector<int> l_orderkey;
-  std::vector<double > l_extendedprice;
 
-  std::unordered_map<int, std::unordered_map<int, double>> result;
+  std::unordered_map<int, std::unordered_map<int, int>> result;
 
  public:
   explicit Executor(LeftTable* leftTable, RightTable* rightTable, char mktsegmentCondition,
       int orderdateCondition, int shipdateCondition, int topn) {
 
-    leftTable->getLeft(mktsegmentCondition, orderdateCondition, o_orderkey, o_orderdate);
-    rightTable->getRight(shipdateCondition, l_orderkey, l_extendedprice);
+    leftTable->filterAfterHashJoin(mktsegmentCondition, orderdateCondition, o_orderkey, o_orderdate);
+    rightTable->filterAfterSortMergeJoin(shipdateCondition, o_orderkey, o_orderdate, result);
+
     this->topn = topn;
     this->c1Result = new int[topn];
     this->c2Result = new int[topn];
-    this->c3Result = new double[topn];
+    this->c3Result = new int[topn];
     memset(c1Result, 0, sizeof(int) * topn);
     memset(c2Result, 0, sizeof(int) * topn);
-    memset(c3Result, 0, sizeof(double) * topn);
+    memset(c3Result, 0, sizeof(int) * topn);
   }
 
   ~Executor() {
@@ -44,35 +45,25 @@ class Executor {
     delete[] c3Result;
   }
 
-  std::string execute() {
-    sortMergeJoin();
+  char* getResult() {
     sortResult();
-    return getResult();
+    auto char_buf = new char[40 * (topn + 1)];
+    int pos = 0;
+    pos += sprintf(char_buf, "l_orderkey|o_orderdate|revenue\n");
+    for (int i = 0; i < topn; i++) {
+      if (c3Result[i] > 0) {
+        pos += sprintf(char_buf + pos,
+            "%d|%d-%d-%d|%.2f\n", c1Result[i],
+            c2Result[i]/10000, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
+            (double)c3Result[i]/100.0);
+      } else {
+        break;
+      }
+    }
+    return char_buf;
   }
 
  private:
-  void sortMergeJoin() {
-    int pos1 = 0, pos2 = 0;
-    int n1 = o_orderkey.size(), n2 = l_orderkey.size();
-    printf("candidate: %d, %d\n", n1, n2);
-    while (pos1 < n1 && pos2 < n2) {
-      int o_key = o_orderkey[pos1];
-      int l_key = l_orderkey[pos2];
-      if (o_key < l_key) {
-        ++pos1;
-      } else if (o_key > l_key) {
-        ++pos2;
-      } else {
-        addRow(o_key, o_orderdate[pos1], l_extendedprice[pos2]);
-        ++pos2;
-      }
-    }
-  }
-
-  void addRow(int orderkey, int orderdate, double extendedprice) {
-    result[orderdate][orderkey] += extendedprice;
-  }
-
   /***
  * result :
  * ----------------------------------
@@ -82,6 +73,7 @@ class Executor {
  * ----------------------------------
  */
   void sortResult() {
+    // TODO heap sort
     for (const auto& dateIter : result) {
       auto orderDate = dateIter.first;
       for (const auto& keyIter : dateIter.second) {
@@ -107,20 +99,6 @@ class Executor {
         c1Result[i] = orderKey;
       }
     }
-  }
-
-  std::string getResult() {
-    std::string sb("l_orderkey|o_orderdate|revenue\n");
-    for (int i = 0; i < topn; i++) {
-      if (c3Result[i] > 0) {
-        sb += std::to_string(c1Result[i]) + "|" +
-              std::to_string(c2Result[i] / 10000) + "-" +
-              std::to_string((c2Result[i] % 10000) / 100) + "-" +
-              std::to_string(c2Result[i] % 100) + "|" +
-              std::to_string(c3Result[i]) + "\n"; // TODO sprintf
-      }
-    }
-    return sb;
   }
 
  public:

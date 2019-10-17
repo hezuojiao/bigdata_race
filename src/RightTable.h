@@ -17,14 +17,14 @@ class RightTable {
  private:
   int* l_orderkey;
   int* l_shipdate;
-  double* l_extendedprice;
+  int* l_extendedprice;
   int tablePosition;
 
  public:
   RightTable():tablePosition(0) {
     l_orderkey = new int[LINEITEM];
     l_shipdate = new int[LINEITEM];
-    l_extendedprice = new double[LINEITEM];
+    l_extendedprice = new int[LINEITEM];
   }
 
 
@@ -39,8 +39,7 @@ class RightTable {
     auto buf = new char[BUFFER_SIZE];
     auto reader = new ReadBuffer(buf, fd);
     char ch;
-    int num1, num2;
-    double p;
+    int num1, num2, num3;
     while (reader->hasNext()) {
       num1 = 0;
       while (reader->hasNext()) {
@@ -54,14 +53,13 @@ class RightTable {
         if (ch == '|') break;
         num2 = ch != '.' ? num2 * 10 + ch - '0' : num2;
       }
-      p = (double) num2 / 100.0;
-      num2 = 0;
+      num3 = 0;
       while (reader->hasNext()) {
         ch = reader->next();
         if (ch == '\n') break;
-        num2 = ch != '-' ? num2 * 10 + ch - '0' : num2;
+        num3 = ch != '-' ? num3 * 10 + ch - '0' : num3;
       }
-      addRow(num1, p, num2);
+      addRow(num1, num2, num3);
     }
 
     delete reader;
@@ -69,7 +67,7 @@ class RightTable {
   }
 
 
-  void getRight(int shipdateCondition, std::vector<int>& orderkey, std::vector<double>& extendedprice) {
+  void filter(int shipdateCondition, std::vector<int>& orderkey, std::vector<int>& extendedprice) {
     for (int i = 0; i < tablePosition; i++) {
       if (l_shipdate[i] > shipdateCondition) {
         orderkey.push_back(l_orderkey[i]);
@@ -78,8 +76,28 @@ class RightTable {
     }
   }
 
+  void filterAfterSortMergeJoin(int shipdateCondition, const std::vector<int>& o_orderkey, const std::vector<int>& o_orderdate,
+      std::unordered_map<int, std::unordered_map<int, int>>& result) {
+      int pos1 = 0, pos2 = 0;
+      int n1 = o_orderkey.size(), n2 = tablePosition;
+      while (pos1 < n1 && pos2 < n2) {
+        int o_key = o_orderkey[pos1];
+        int l_key = l_orderkey[pos2];
+        if (o_key < l_key) {
+          ++pos1;
+        } else if (o_key > l_key) {
+          ++pos2;
+        } else {
+          if (l_shipdate[pos2] > shipdateCondition) {
+            result[o_orderdate[pos1]][o_key] += l_extendedprice[pos2];
+          }
+          ++pos2;
+        }
+      }
+  }
+
  private:
-  void addRow(int orderKey, double extendedPrice, int shipDate) {
+  void addRow(int orderKey, int extendedPrice, int shipDate) {
     l_orderkey[tablePosition] = orderKey;
     l_extendedprice[tablePosition] = extendedPrice;
     l_shipdate[tablePosition] = shipDate;

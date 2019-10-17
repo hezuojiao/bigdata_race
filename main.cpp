@@ -21,23 +21,40 @@ int main(int argc, char** argv) {
   auto end = std::chrono::system_clock::now();
   auto dur = end - start;
   auto secs = std::chrono::duration_cast<float_seconds>(dur);
-  std::cout << "build spend: " << secs.count() << std::endl;
+  printf("LOG :: build spend: %fs\n", secs.count());
+
+  auto round = std::stoi(argv[4]);
+  auto thread_num = std::min(CORE_NUM, round);
+  std::thread threads[thread_num];
+  std::vector<char*> results(round);
 
   start = std::chrono::system_clock::now();
-  auto round = std::stoi(argv[4]);
-  for (int i = 0; i < round; i++) {
-
-    auto mktsegmentCondition = argv[5 + i * 4][0];
-    auto orderdateCondition = Executor::DateToInt(argv[5 + i * 4 + 1]);
-    auto shipdateCondition = Executor::DateToInt(argv[5 + i * 4 + 2]);
-    auto topn = std::stoi(argv[5 + i * 4 + 3]);
-    auto executor = new Executor(leftTable, rightTable, mktsegmentCondition, orderdateCondition, shipdateCondition, topn);
-    std::cout << executor->execute();
+  for (int i = 0; i < thread_num; i++) {
+    threads[i] = std::thread([leftTable, rightTable, i, round, thread_num, &results, &argv]{
+      for (int round_id = i; round_id < round; round_id += thread_num) {
+        auto mktsegmentCondition = argv[5 + round_id * 4][0];
+        auto orderdateCondition = Executor::DateToInt(argv[5 + round_id * 4 + 1]);
+        auto shipdateCondition = Executor::DateToInt(argv[5 + round_id * 4 + 2]);
+        auto topn = std::stoi(argv[5 + round_id * 4 + 3]);
+        auto executor = new Executor(leftTable, rightTable, mktsegmentCondition, orderdateCondition, shipdateCondition, topn);
+        results[round_id] = executor->getResult();
+      }
+    });
   }
+
+  for (auto &t : threads) {
+    t.join();
+  }
+
+  for (auto &r : results) {
+    printf("%s", r);
+  }
+
   end = std::chrono::system_clock::now();
   dur = end - start;
   secs = std::chrono::duration_cast<float_seconds>(dur);
-  std::cout << "query spend: " << secs.count() << std::endl;
+
+  printf("LOG :: query spend: %fs\n", secs.count());
 
   return 0;
 }

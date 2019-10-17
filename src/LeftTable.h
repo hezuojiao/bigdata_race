@@ -41,20 +41,12 @@ class LeftTable {
     auto buf = new char[BUFFER_SIZE];
     auto reader = new ReadBuffer(buf, fd);
     char ch, name;
-    int num1, num2, num3;
+    int num1 = 1, num2, num3;
     while (reader->hasNext()) {
-      num1 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '|') break;
-        num1 = num1 * 10 + ch - '0';
-      }
-      while (reader->hasNext()) {
-        name = reader->next();
-        while (reader->hasNext() && reader->next() != '\n'){}
-        break;
-      }
-      c_hashtable[name].insert(num1);
+      while (reader->next() != '|') {}
+      name = reader->next();
+      while (reader->hasNext() && reader->next() != '\n'){}
+      c_hashtable[name].insert(num1++);
     }
 
     delete reader;
@@ -88,7 +80,7 @@ class LeftTable {
     delete[] buf;
   }
 
-  void getLeft(char mktsegmentCondition, int orderdateCondition,
+  void filterAfterHashJoin(char mktsegmentCondition, int orderdateCondition,
       std::vector<int>& orderkey, std::vector<int>& orderdate) {
     auto c_custkey = c_hashtable[mktsegmentCondition];
     for (int i = 0; i < tablePosition; i++) {
@@ -106,7 +98,6 @@ class LeftTable {
     o_orderdate[tablePosition] = orderDate;
     tablePosition++;
   }
-
 };
 
 #endif //BIGDATA_RACE_LEFTTABLE_H
