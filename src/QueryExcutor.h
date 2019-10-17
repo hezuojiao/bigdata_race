@@ -46,7 +46,13 @@ class Executor {
   }
 
   char* getResult() {
-    sortResult();
+
+    if (topn > MAX_LENGTH_INSERT_SORT) {
+      heapSort();
+    } else {
+      insertSort();
+    }
+
     auto char_buf = new char[40 * (topn + 1)];
     int pos = 0;
     pos += sprintf(char_buf, "l_orderkey|o_orderdate|revenue\n");
@@ -72,8 +78,8 @@ class Executor {
  *| order_date | extended_price_sum |
  * ----------------------------------
  */
-  void sortResult() {
-    // TODO heap sort
+
+  void insertSort() {
     for (const auto& dateIter : result) {
       auto orderDate = dateIter.first;
       for (const auto& keyIter : dateIter.second) {
@@ -99,6 +105,53 @@ class Executor {
         c1Result[i] = orderKey;
       }
     }
+  }
+
+
+  void heapSort() {
+    for (const auto& dateIter : result) {
+      auto orderDate = dateIter.first;
+      for (const auto& keyIter : dateIter.second) {
+        auto orderKey = keyIter.first;
+        auto expenseprice = keyIter.second;
+
+        if (expenseprice < c3Result[0]) {
+          continue;
+        }
+
+        c3Result[0] = expenseprice;
+        c2Result[0] = orderDate;
+        c1Result[0] = orderKey;
+        adjust(topn);
+      }
+    }
+
+    for (int i = topn - 1; i > 0; i--) {
+      swap(0, i);
+      adjust(i);
+    }
+  }
+
+
+  inline void adjust(int end) {
+    int i = 0, c;
+    while (i < end) {
+      c = i * 2 + 1;
+      if (c >= end) break;
+      if (c + 1 < end && c3Result[c] > c3Result[c + 1]) ++c;
+      if (c3Result[i] > c3Result[c]) {
+        swap(i, c);
+        i = c;
+      } else {
+        break;
+      }
+    }
+  }
+
+  inline void swap(int left, int right) {
+    c1Result[left] ^= c1Result[right] ^= c1Result[left] ^= c1Result[right];
+    c2Result[left] ^= c2Result[right] ^= c2Result[left] ^= c2Result[right];
+    c3Result[left] ^= c3Result[right] ^= c3Result[left] ^= c3Result[right];
   }
 
  public:
