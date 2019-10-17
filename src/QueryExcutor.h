@@ -8,8 +8,12 @@
 #include <cstring>
 #include <queue>
 
+#include "spp.h"
+
 #include "LeftTable.h"
 #include "RightTable.h"
+
+using spp::sparse_hash_map;
 
 class Executor {
  private:
@@ -21,7 +25,7 @@ class Executor {
   std::vector<int> o_orderkey;
   std::vector<int> o_orderdate;
 
-  std::unordered_map<int, std::unordered_map<int, int>> result;
+  sparse_hash_map<int, sparse_hash_map<int, int>> result;
 
  public:
   explicit Executor(LeftTable* leftTable, RightTable* rightTable, char mktsegmentCondition,

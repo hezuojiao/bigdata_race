@@ -6,13 +6,16 @@
 #define BIGDATA_RACE_LEFTTABLE_H
 
 
-#include <unordered_set>
-#include <unordered_map>
 #include <string>
 #include <vector>
 
+#include "spp.h"
+
 #include "Constants.h"
 #include "ReadBuffer.h"
+
+using spp::sparse_hash_map;
+using spp::sparse_hash_set;
 
 class LeftTable {
  private:
@@ -20,7 +23,7 @@ class LeftTable {
   int* o_custkey;
   int* o_orderdate;
   int tablePosition;
-  std::unordered_map<char, std::unordered_set<int>> c_hashtable;
+  sparse_hash_map<char, sparse_hash_set<int>> c_hashtable;
 
  public:
   LeftTable():tablePosition(0) {

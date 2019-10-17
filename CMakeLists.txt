@@ -21,5 +21,7 @@ add_executable(
   src/RightTable.h
 )
 
+include_directories(src/sparsepp)
+
 find_package(Threads REQUIRED)
 target_link_libraries(bigdata_race Threads::Threads)

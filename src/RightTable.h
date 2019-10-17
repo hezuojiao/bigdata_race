@@ -5,13 +5,16 @@
 #ifndef BIGDATA_RACE_RIGHTTABLE_H
 #define BIGDATA_RACE_RIGHTTABLE_H
 
-#include <unordered_set>
-#include <unordered_map>
+
 #include <string>
 #include <vector>
 
+#include "spp.h"
+
 #include "Constants.h"
 #include "ReadBuffer.h"
+
+using spp::sparse_hash_map;
 
 class RightTable {
  private:
@@ -77,7 +80,7 @@ class RightTable {
   }
 
   void filterAfterSortMergeJoin(int shipdateCondition, const std::vector<int>& o_orderkey, const std::vector<int>& o_orderdate,
-      std::unordered_map<int, std::unordered_map<int, int>>& result) {
+      sparse_hash_map<int, sparse_hash_map<int, int>>& result) {
       int pos1 = 0, pos2 = 0;
       int n1 = o_orderkey.size(), n2 = tablePosition;
       while (pos1 < n1 && pos2 < n2) {
