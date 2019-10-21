@@ -17,8 +17,8 @@ add_executable(
   src/Constants.h
   src/LeftTable.h
   src/QueryExecutor.h
-  src/ReadBuffer.h
   src/RightTable.h
+  src/FileUtil.h
 )
 
 include_directories(src/sparsepp)

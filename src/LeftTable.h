@@ -6,85 +6,87 @@
 #define BIGDATA_RACE_LEFTTABLE_H
 
 
-#include <string>
-#include <vector>
-#include <fstream>
-
-#include "spp.h"
-
+#include "FileUtil.h"
 #include "Constants.h"
-#include "ReadBuffer.h"
 
 using spp::sparse_hash_map;
 using spp::sparse_hash_set;
 
 class LeftTable {
  private:
+  char* c_mktsegment;
   int* o_orderkey;
   int* o_custkey;
   int* o_orderdate;
   int tablePosition;
+
+ private:
   sparse_hash_map<char, sparse_hash_set<int>> c_hashtable;
 
  public:
-  LeftTable():tablePosition(0) {
-    o_orderkey = new int[ORDER];
-    o_custkey = new int[ORDER];
-    o_orderdate = new int[ORDER];
-  }
+  LeftTable():tablePosition(0) {}
 
 
   ~LeftTable() {
-    delete[] o_orderkey;
-    delete[] o_custkey;
-    delete[] o_orderdate;
+    size_t len = sizeof(int) * ORDER;
+    munmap(o_orderkey, len);
+    munmap(o_custkey, len);
+    munmap(o_orderdate, len);
   }
 
-  void buildTable(const char* customerFileName, const char* orderFileName) {
-    auto fd = open(customerFileName, O_RDONLY , 0777);
-    auto buf = new char[BUFFER_SIZE];
-    auto reader = new ReadBuffer(buf, fd);
-    char ch, name;
-    int num1 = 1, num2, num3;
-    while (reader->hasNext()) {
-      while (reader->next() != '|') {}
-      name = reader->next();
-      while (reader->hasNext() && reader->next() != '\n'){}
-      c_hashtable[name].insert(num1++);
+
+  void buildCache(const char* customerFileName, const char* orderFileName) {
+    if (!file_exists("c_mktsegment.cache")) {
+      auto fd = open("c_mktsegment.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, CUSTOMER * sizeof(char));
+      c_mktsegment = (char*)mmap(nullptr, CUSTOMER * sizeof(char), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+
+      fd = open("o_orderkey.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, ORDER * sizeof(int));
+      o_orderkey = (int*)mmap(nullptr, ORDER * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+
+      fd = open("o_custkey.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, ORDER * sizeof(int));
+      o_custkey = (int*)mmap(nullptr, ORDER * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+
+      fd = open("o_orderdate.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, ORDER * sizeof(int));
+      o_orderdate = (int*)mmap(nullptr, ORDER * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+
+      parse(customerFileName, orderFileName);
+    } else {
+
+      auto fd = open("c_mktsegment.cache", O_RDONLY, 0777);
+      c_mktsegment = (char*)mmap(nullptr, CUSTOMER * sizeof(char), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      fd = open("o_orderkey.cache", O_RDONLY, 0777);
+      o_orderkey = (int*)mmap(nullptr, ORDER * sizeof(int), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      fd = open("o_custkey.cache", O_RDONLY, 0777);
+      o_custkey = (int*)mmap(nullptr, ORDER * sizeof(int), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      fd = open("o_orderdate.cache", O_RDONLY, 0777);
+      o_orderdate = (int*)mmap(nullptr, ORDER * sizeof(int), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      tablePosition = ORDER;
     }
 
-    delete reader;
-
-    fd = open(orderFileName, O_RDONLY, 0777);
-    reader = new ReadBuffer(buf, fd);
-
-    while (reader->hasNext()) {
-      num1 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '|') break;
-        num1 = num1 * 10 + ch - '0';
-      }
-      num2 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '|') break;
-        num2 = num2 * 10 + ch - '0';
-      }
-      num3 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '\n') break;
-        num3 = ch != '-' ? num3 * 10 + ch - '0' : num3;
-      }
-      addRow(num1, num2, num3);
+    for (int i = 0; i < CUSTOMER; i++) {
+      c_hashtable[c_mktsegment[i]].insert(i + 1);
     }
-
-    delete reader;
-    delete[] buf;
+    munmap(c_mktsegment, CUSTOMER * sizeof(char));
   }
 
-  void buildTable2(const char* customerFileName, const char* orderFileName) {
+
+  void parse(const char* customerFileName, const char* orderFileName) {
     auto fd = open(customerFileName, O_RDONLY , 0777);
     struct stat s;
     if (fstat(fd, &s) < 0) {
@@ -95,12 +97,12 @@ class LeftTable {
     size_t len = s.st_size, pos = 0;
     char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
     posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
-    int num1 = 1, num2, num3;
+    int num1 = 0, num2, num3;
     while (pos < len) {
       while (base[pos++] != '|') {}
       char name = base[pos++];
       while (pos < len && base[pos++] != '\n'){}
-      c_hashtable[name].insert(num1++);
+      c_mktsegment[num1++] = name;
     }
 
     munmap(base, s.st_size);
@@ -134,6 +136,7 @@ class LeftTable {
           num3 = num3 * 10 + base[pos] - '0';
         ++pos;
       }
+      ++pos;
       addRow(num1, num2, num3);
     }
 

@@ -6,9 +6,10 @@
 #define BIGDATA_RACE_CONSTANTS_H
 
 
-const int CUSTOMER = 15000000;
-const int LINEITEM = 600037902;
-const int ORDER    = 150000000;
+const size_t CUSTOMER = 15000000;
+const size_t LINEITEM = 600037902;
+const size_t ORDER    = 150000000;
+
 
 //const int CUSTOMER = 1500;
 //const int LINEITEM = 60003;

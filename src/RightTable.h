@@ -6,16 +6,8 @@
 #define BIGDATA_RACE_RIGHTTABLE_H
 
 
-#include <string>
-#include <vector>
-#include <fstream>
-#include <stdlib.h>
-#include "errno.h"
-#include "sys/stat.h"
-#include "spp.h"
-
+#include "FileUtil.h"
 #include "Constants.h"
-#include "ReadBuffer.h"
 
 using spp::sparse_hash_map;
 
@@ -27,60 +19,55 @@ class RightTable {
   int tablePosition;
 
  public:
-  RightTable():tablePosition(0) {
-    l_orderkey = new int[LINEITEM];
-    l_shipdate = new int[LINEITEM];
-    l_extendedprice = new int[LINEITEM];
-  }
+  RightTable():tablePosition(0) {}
 
 
   ~RightTable() {
-    delete[] l_orderkey;
-    delete[] l_shipdate;
-    delete[] l_extendedprice;
+    size_t len = sizeof(int) * LINEITEM;
+    munmap(l_orderkey, len);
+    munmap(l_shipdate, len);
+    munmap(l_extendedprice, len);
   }
 
-  void buildTable(const char* lineitemFileName) {
-    auto fd = open(lineitemFileName, O_RDONLY , 0777);
-    auto buf = new char[BUFFER_SIZE];
-    auto reader = new ReadBuffer(buf, fd);
-    char ch;
-    int num1, num2, num3;
-    while (reader->hasNext()) {
-      num1 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '|') break;
-        num1 = num1 * 10 + ch - '0';
-      }
-      num2 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '|') break;
-        num2 = ch != '.' ? num2 * 10 + ch - '0' : num2;
-      }
-      num3 = 0;
-      while (reader->hasNext()) {
-        ch = reader->next();
-        if (ch == '\n') break;
-        num3 = ch != '-' ? num3 * 10 + ch - '0' : num3;
-      }
-      addRow(num1, num2, num3);
-    }
-
-    delete reader;
-    delete[] buf;
-  }
-
-  void buildTable2(const char* lineitemFileName) {
-    auto fd = open(lineitemFileName, O_RDONLY, 0777);
-    struct stat s;
-    if (fstat(fd, &s) < 0) {
+  void buildCache(const char* lineitemFileName) {
+    if (!file_exists("l_orderkey.cache")) {
+      auto fd = open("l_orderkey.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, LINEITEM * sizeof(int));
+      l_orderkey = (int*)mmap(nullptr, LINEITEM * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
-      return;
-    }
 
-    size_t len = s.st_size, pos = 0;
+      fd = open("l_shipdate.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, LINEITEM * sizeof(int));
+      l_shipdate = (int*)mmap(nullptr, LINEITEM * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+
+      fd = open("l_extendedprice.cache", O_RDWR | O_CREAT, 0777);
+      fallocate(fd, 0, 0, LINEITEM * sizeof(int));
+      l_extendedprice = (int*)mmap(nullptr, LINEITEM * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      close(fd);
+
+      parse(lineitemFileName);
+    } else {
+      auto fd = open("l_orderkey.cache", O_RDONLY, 0777);
+      l_orderkey = (int*)mmap(nullptr, LINEITEM * sizeof(int), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      fd = open("l_shipdate.cache", O_RDONLY, 0777);
+      l_shipdate = (int*)mmap(nullptr, LINEITEM * sizeof(int), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      fd = open("l_extendedprice.cache", O_RDONLY, 0777);
+      l_extendedprice = (int*)mmap(nullptr, LINEITEM * sizeof(int), PROT_READ, MAP_PRIVATE, fd, 0);
+      close(fd);
+
+      tablePosition = LINEITEM;
+    }
+  }
+
+
+  void parse(const char* lineitemFileName) {
+    auto fd = open(lineitemFileName, O_RDONLY, 0777);
+    size_t len = file_size(lineitemFileName), pos = 0;
     char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
     posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
     int num1, num2, num3;
@@ -92,7 +79,9 @@ class RightTable {
       ++pos;
       num2 = 0;
       while (base[pos] != '|') {
-        num2 = num2 * 10 + base[pos++] - '0';
+        if (base[pos] != '.')
+          num2 = num2 * 10 + base[pos] - '0';
+        ++pos;
       }
       ++pos;
       num3 = 0;
@@ -101,12 +90,12 @@ class RightTable {
           num3 = num3 * 10 + base[pos] - '0';
         ++pos;
       }
+      ++pos;
       addRow(num1, num2, num3);
     }
-    munmap(base, s.st_size);
+    munmap(base, len);
     close(fd);
   }
-
 
   void filter(int shipdateCondition, std::vector<int>& orderkey, std::vector<int>& extendedprice) {
     for (int i = 0; i < tablePosition; i++) {

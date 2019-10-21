@@ -64,7 +64,7 @@ class Executor {
     for (int i = 0; i < topn; i++) {
       if (c3Result[i] > 0) {
         pos += sprintf(char_buf + pos,
-            "%d|%d-%d-%d|%.2f\n", c1Result[i],
+            "%d|%d-%02d-%02d|%.2f\n", c1Result[i],
             c2Result[i]/10000, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
             (double)c3Result[i]/100.0);
       } else {
