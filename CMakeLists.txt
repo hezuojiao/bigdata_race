@@ -23,5 +23,7 @@ add_executable(
 
 include_directories(src/sparsepp)
 
+add_subdirectory(test)
+
 find_package(Threads REQUIRED)
 target_link_libraries(bigdata_race Threads::Threads)
