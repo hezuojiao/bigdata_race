@@ -11,10 +11,10 @@ int main(int argc, char** argv) {
   typedef std::chrono::duration<float> float_seconds;
   auto start = std::chrono::system_clock::now();
   std::thread thread1 = std::thread([leftTable, argv] {
-    leftTable->buildTable(argv[1], argv[2]);
+    leftTable->buildTable2(argv[1], argv[2]);
   });
   std::thread thread2 = std::thread([rightTable, argv] {
-    rightTable->buildTable(argv[3]);
+    rightTable->buildTable2(argv[3]);
   });
   thread1.join();
   thread2.join();

@@ -8,6 +8,7 @@
 
 #include <string>
 #include <vector>
+#include <fstream>
 
 #include "spp.h"
 
@@ -81,6 +82,63 @@ class LeftTable {
 
     delete reader;
     delete[] buf;
+  }
+
+  void buildTable2(const char* customerFileName, const char* orderFileName) {
+    auto fd = open(customerFileName, O_RDONLY , 0777);
+    struct stat s;
+    if (fstat(fd, &s) < 0) {
+      close(fd);
+      return;
+    }
+
+    size_t len = s.st_size, pos = 0;
+    char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
+    posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
+    int num1 = 1, num2, num3;
+    while (pos < len) {
+      while (base[pos++] != '|') {}
+      char name = base[pos++];
+      while (pos < len && base[pos++] != '\n'){}
+      c_hashtable[name].insert(num1++);
+    }
+
+    munmap(base, s.st_size);
+    close(fd);
+
+    fd = open(orderFileName, O_RDONLY, 0777);
+    if (fstat(fd, &s) < 0) {
+      close(fd);
+      return;
+    }
+
+    len = s.st_size, pos = 0;
+    base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
+    posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
+    while (pos < len) {
+      num1 = 0;
+      while (base[pos] != '|') {
+        num1 = num1 * 10 + base[pos] - '0';
+        ++pos;
+      }
+      ++pos;
+      num2 = 0;
+      while (base[pos] != '|') {
+        num2 = num2 * 10 + base[pos] - '0';
+        ++pos;
+      }
+      ++pos;
+      num3 = 0;
+      while (pos < len && base[pos] != '\n') {
+        if (base[pos] != '-')
+          num3 = num3 * 10 + base[pos] - '0';
+        ++pos;
+      }
+      addRow(num1, num2, num3);
+    }
+
+    munmap(base, len);
+    close(fd);
   }
 
   void filterAfterHashJoin(char mktsegmentCondition, int orderdateCondition,
