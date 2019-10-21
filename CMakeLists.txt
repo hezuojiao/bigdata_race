@@ -16,7 +16,7 @@ add_executable(
   bigdata_race main.cpp
   src/Constants.h
   src/LeftTable.h
-  src/QueryExcutor.h
+  src/QueryExecutor.h
   src/ReadBuffer.h
   src/RightTable.h
 )

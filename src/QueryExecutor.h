@@ -2,8 +2,8 @@
 // Created by hezuojiao on 2019-10-16.
 //
 
-#ifndef BIGDATA_RACE_QUERYEXCUTOR_H
-#define BIGDATA_RACE_QUERYEXCUTOR_H
+#ifndef BIGDATA_RACE_QUERYEXECUTOR_H
+#define BIGDATA_RACE_QUERYEXECUTOR_H
 
 #include <cstring>
 #include <queue>
@@ -41,6 +41,7 @@ class Executor {
     memset(c1Result, 0, sizeof(int) * topn);
     memset(c2Result, 0, sizeof(int) * topn);
     memset(c3Result, 0, sizeof(int) * topn);
+
   }
 
   ~Executor() {
@@ -168,4 +169,4 @@ class Executor {
   }
 };
 
-#endif //BIGDATA_RACE_QUERYEXCUTOR_H
+#endif //BIGDATA_RACE_QUERYEXECUTOR_H

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <thread>
 
-#include "src/QueryExcutor.h"
+#include "src/QueryExecutor.h"
 
 int main(int argc, char** argv) {
 
@@ -24,7 +24,8 @@ int main(int argc, char** argv) {
   printf("LOG :: build spend: %fs\n", secs.count());
 
   auto round = std::stoi(argv[4]);
-  auto thread_num = std::min(CORE_NUM, round);
+  int max_thread_num = std::thread::hardware_concurrency();
+  auto thread_num = std::min(max_thread_num, round);
   std::thread threads[thread_num];
   std::vector<char*> results(round);
 

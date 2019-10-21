@@ -16,8 +16,6 @@ const int ORDER    = 150000000;
 
 const int BUFFER_SIZE = 64 * 1024; // 64kb
 
-const int CORE_NUM = 16;
-
 const int MAX_LENGTH_INSERT_SORT = 12;
 
 
