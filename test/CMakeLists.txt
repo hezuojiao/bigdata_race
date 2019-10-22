@@ -14,5 +14,4 @@ MESSAGE (STATUS "Build type of test_avx: ${CMAKE_BUILD_TYPE}")
 
 add_executable(test_avx
         main.cpp
-        avx.h
-)
+        )

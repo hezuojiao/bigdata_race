@@ -2,109 +2,98 @@
 #include <thread>
 #include <vector>
 #include <string>
-#include <immintrin.h>
 #include "Timer.h"
+#include "utils.h"
+#include "../src/FileUtil.h"
+#include <fstream>
+#include <random>
+
+#include <sys/shm.h>
 
 using namespace std;
 
-template <class T>
-void init_data(T &va, T &vb) {
-    fill(va.begin(), va.end(),rand());
-    fill(vb.begin(), vb.end(),rand());
+#define filename "shmid"
+#define ipcid 1010102
+
+int readid(){
+    int shmid;
+    fstream  fd;
+    fd.open(filename, ios_base::in);
+    fd>>shmid;
+    fd.close();
+    return shmid;
 }
 
-
-template <class T1, class T2, class T3, class T4=string>
-void Log(T1 a, T2 b, T3 c="", T4 d="") {
-    cout<<"LOG :: "<<a<<": "<<b<<" "<<c<<" "<<d<<"\n";
+void writeid(int id) {
+    fstream  fd;
+    fd.open(filename, ios_base::out);
+    fd<<id;
+    fd.close();
 }
 
-template <class T>
-void test_for(T *a, T *b, T *c, int len) {
-    for(int i=0;i<len;i++){
-        c[i] = a[i]*b[i];
-    }
-    return ;
-}
+using T = float ;
+int run() {
+    constexpr int SIZE = 1'000'000;
 
-template <class T>
-void test_avx(T *a, T *b, T *d, int len) {
-    int i;
-    for (i = 0; i <= len - 8; i += 8)
-    {
-        __m256 x = _mm256_loadu_ps(a + i);
-        __m256 y = _mm256_loadu_ps(b + i);
-        __m256 z = _mm256_mul_ps(x, y);
-        _mm256_storeu_ps(d + i, z);
-    }
-    for ( ; i < len; i++)
-    {
-        d[i] = a[i] * b[i];
-    }
-}
+    Timer t;
+    int shmid;
+    T* shmaddr = nullptr;
+    /*
+    1、查看共享内存，使用命令：ipcs -m
+    2、删除共享内存，使用命令：ipcrm -m [shmid]
+     */
 
-template <class T>
-bool check_data(T &va, T &vb, int len) {
-    int cnt = 0;
-    for(int i=0; i<len; i++) {
-        if(va[i] != vb[i]) {
-            cnt++;
+    // there is one id for one shared memory
+    // we write it in the file shmid
+    if(!file_exists(filename)) {
+        shmid = shmget(ipcid, SIZE*sizeof(T), IPC_CREAT|0666);
+        if(shmid == -1) {
+            Log("ERROE alloc shm", shmid, ""); // TODO add error info
+            exit(EXIT_FAILURE);
+        }
+        writeid(shmid);
+
+//        ftok()
+        shmaddr = (T*)shmat(shmid, 0, 0);// addr
+        if(shmaddr == (void*)-1)
+        {
+            perror("shmget");
+            Log("ERROE shmat shm", shmid, errno); // TODO add error info
+            exit(EXIT_FAILURE);
+        }
+
+        std::mt19937 randmt(1);
+        uniform_real_distribution<float > dis2(0.0, 1.0);
+        vector<T> va(SIZE);
+        fill(va.begin(), va.end(), dis2(randmt));
+        Log("inti", "1,9",va[1]+va[9]);
+        Log("inti", "2,9",va[2]+va[9]);
+        memcpy(shmaddr, va.data(), SIZE*sizeof(T));
+    }else{
+        shmid = readid();
+        shmaddr = (T*)shmat(shmid, 0, 0);// addr
+        if(shmaddr == (void*)-1)
+        {
+            perror("shmget");
+            Log("ERROE shmat shm", shmid, errno); // TODO add error info
+            exit(EXIT_FAILURE);
         }
     }
-    if(cnt != 0) cout<<"diff: "<<cnt;
-    return cnt==0;
-}
 
-using T = float;
-/*
-# result
-## -O0
-LOG :: alloc: 6.71725 s
-LOG :: build data: 0.680169 s
-LOG :: for loop: 0.366461 s
-LOG :: avx : 0.151182 s
-checking pass
-LOG :: check: 0.407603 s
+    Log("inti", "1,9",shmaddr[1]+shmaddr[9]);
+    Log("inti", "2,9",shmaddr[2]+shmaddr[9]);
+    // detach
+    shmdt(shmaddr);
 
-## -O3
-LOG :: alloc: 1.30162 s
-LOG :: build data: 0.121267 s
-LOG :: for loop: 0.100554 s
-LOG :: avx : 0.091902 s
-checking pass
-LOG :: check: 0.040744 s
- */
-int main() {
-    constexpr int SIZE = 100'000'000;
-
-    /// alloc
-    Timer t;
-    vector<T> va(SIZE);
-    vector<T> vb(SIZE);
-    vector<T> vf(SIZE,0);
-    vector<T> vavx(SIZE,0);
-    Log("alloc", t.duration(),"s");
-
-    /// init data
-    t.reset();
-    init_data(va, vb);
-    Log("build data", t.duration(), "s");
-
-    /// for
-    t.reset();
-    test_for(va.data(), vb.data(), vf.data(), SIZE);
-    Log("for loop", t.duration(), "s");
-
-    /// avx
-    t.reset();
-    test_avx(va.data(), vb.data(), vavx.data(), SIZE);
-    Log("avx ", t.duration(), "s");
-
-    /// check
-    t.reset();
-    cout<<"checking "<<(check_data(vf, vavx, SIZE)? "pass": "fail")<<"\n";
-    Log("check", t.duration(), "s");
+    Log("ret", t.duration(), "");
 
     return 0;
+}
 
+int main() {
+    cout<<file_exists(filename)<<","<<remove(filename)<<endl;
+    for(int i=0;i<10;i++) {
+        cout<<"i:"<<i<<endl;
+        run();
+    }
 }
