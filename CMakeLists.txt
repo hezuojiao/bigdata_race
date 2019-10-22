@@ -15,10 +15,9 @@ MESSAGE (STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 add_executable(
   bigdata_race main.cpp
   src/Constants.h
-  src/LeftTable.h
-  src/QueryExecutor.h
-  src/RightTable.h
-  src/FileUtil.h
+  src/Executor.h
+  src/Utils.h
+  src/Tables.cc
 )
 
 include_directories(src/sparsepp)

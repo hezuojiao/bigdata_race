@@ -2,16 +2,14 @@
 // Created by hezuojiao on 2019-10-16.
 //
 
-#ifndef BIGDATA_RACE_QUERYEXECUTOR_H
-#define BIGDATA_RACE_QUERYEXECUTOR_H
+#ifndef BIGDATA_RACE_EXECUTOR_H
+#define BIGDATA_RACE_EXECUTOR_H
 
 #include <cstring>
-#include <queue>
+#include <vector>
 
 #include "spp.h"
-
-#include "LeftTable.h"
-#include "RightTable.h"
+#include "Tables.h"
 
 using spp::sparse_hash_map;
 
@@ -22,17 +20,13 @@ class Executor {
   int* c2Result;
   int* c3Result;
 
-  std::vector<int> o_orderkey;
-  std::vector<int> o_orderdate;
-
   sparse_hash_map<int, sparse_hash_map<int, int>> result;
 
  public:
-  explicit Executor(LeftTable* leftTable, RightTable* rightTable, char mktsegmentCondition,
-      int orderdateCondition, int shipdateCondition, int topn) {
+   Executor(Customer* customer, const Order* order, const Lineitem* lineitem,
+      char mktsegmentCondition, int orderdateCondition, int shipdateCondition, int topn) {
 
-    leftTable->filterAfterHashJoin(mktsegmentCondition, orderdateCondition, o_orderkey, o_orderdate);
-    rightTable->filterAfterSortMergeJoin(shipdateCondition, o_orderkey, o_orderdate, result);
+    this->executePlan(customer, order, lineitem, mktsegmentCondition, orderdateCondition, shipdateCondition);
 
     this->topn = topn;
     this->c1Result = new int[topn];
@@ -41,7 +35,6 @@ class Executor {
     memset(c1Result, 0, sizeof(int) * topn);
     memset(c2Result, 0, sizeof(int) * topn);
     memset(c3Result, 0, sizeof(int) * topn);
-
   }
 
   ~Executor() {
@@ -49,6 +42,7 @@ class Executor {
     delete[] c2Result;
     delete[] c3Result;
   }
+
 
   char* getResult() {
 
@@ -64,9 +58,9 @@ class Executor {
     for (int i = 0; i < topn; i++) {
       if (c3Result[i] > 0) {
         pos += sprintf(char_buf + pos,
-            "%d|%d-%02d-%02d|%.2f\n", c1Result[i],
-            c2Result[i]/10000, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
-            (double)c3Result[i]/100.0);
+                       "%d|%d-%02d-%02d|%.2f\n", c1Result[i],
+                       c2Result[i] / 10000, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
+                       (double) c3Result[i] / 100.0);
       } else {
         break;
       }
@@ -75,6 +69,56 @@ class Executor {
   }
 
  private:
+
+  void executePlan(Customer* customer, const Order* order, const Lineitem* lineitem,
+                   char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
+
+    auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
+    std::vector<int> orderkey; orderkey.reserve(15000000);
+    std::vector<int> orderdate; orderdate.reserve(15000000);
+
+    for (int i = 0; i < ORDER; i++) {  // filter and hash join
+      if (order->o_orderdate[i] < orderdateCondition && c_custkey.find(order->o_custkey[i]) != c_custkey.end()) {
+        orderkey.push_back(order->o_orderkey[i]);
+        orderdate.push_back(order->o_orderdate[i]);
+      }
+    }
+
+    uint32_t o_pos = 0, l_pos = 0, n1 = orderkey.size();
+    while (o_pos < n1 && l_pos < LINEITEM) { // sort merge join and filter
+      auto o_key = orderkey[o_pos];
+      auto l_key = lineitem->l_orderkey[l_pos];
+      if (o_key < l_key) {
+        ++o_pos;
+      } else if (o_key > l_key) {
+        ++l_pos;
+      } else {
+        if (lineitem->l_shipdate[l_pos] > shipdateCondition) {
+          result[orderdate[o_pos]][o_key] += lineitem->l_extendedprice[l_pos];
+        }
+        ++l_pos;
+      }
+    }
+  }
+
+  void executePlan2(Customer* customer, const Order* order, const Lineitem* lineitem,
+                    char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
+    auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
+    uint32_t o_pos = 0, l_pos = 0;
+    while (o_pos < ORDER && l_pos < LINEITEM) {
+      if (order->o_orderdate[o_pos] < orderdateCondition && c_custkey.find(order->o_custkey[o_pos]) != c_custkey.end()) {
+        auto o_key = order->o_orderkey[o_pos];
+        while (lineitem->l_orderkey[l_pos] < o_key) {++l_pos;}
+        while (l_pos < LINEITEM && lineitem->l_orderkey[l_pos] == o_key) {
+          if (lineitem->l_shipdate[l_pos] > shipdateCondition)
+            result[order->o_orderdate[o_pos]][o_key] += lineitem->l_extendedprice[l_pos];
+          ++l_pos;
+        }
+      }
+      ++o_pos;
+    }
+  }
+
   /***
  * result :
  * ----------------------------------
@@ -158,15 +202,6 @@ class Executor {
     c2Result[left] ^= c2Result[right] ^= c2Result[left] ^= c2Result[right];
     c3Result[left] ^= c3Result[right] ^= c3Result[left] ^= c3Result[right];
   }
-
- public:
-  static int DateToInt(const char* date) {
-    int i_date = 0;
-    for (int i = 0; date[i] != '\0'; i++) {
-      i_date = date[i] != '-' ? i_date * 10 + date[i] - '0' : i_date;
-    }
-    return i_date;
-  }
 };
 
-#endif //BIGDATA_RACE_QUERYEXECUTOR_H
+#endif //BIGDATA_RACE_EXECUTOR_H

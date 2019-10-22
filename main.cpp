@@ -1,23 +1,29 @@
 #include <iostream>
 #include <thread>
 
-#include "src/QueryExecutor.h"
+#include "src/Executor.h"
 
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
 
-  auto leftTable = new LeftTable();
-  auto rightTable = new RightTable();
+  auto customer = new Customer();
+  auto order = new Order();
+  auto lineitem = new Lineitem();
 
+  bool rebuild = !util::file_exists(C_MKTSEMENT_PATH.c_str());
   typedef std::chrono::duration<float> float_seconds;
   auto start = std::chrono::system_clock::now();
-  std::thread thread1 = std::thread([leftTable, argv] {
-    leftTable->buildCache(argv[1], argv[2]);
+  std::thread thread1 = std::thread([customer, rebuild, argv] {
+    customer->buildCache(argv[1], rebuild);
   });
-  std::thread thread2 = std::thread([rightTable, argv] {
-    rightTable->buildCache(argv[3]);
+  std::thread thread2 = std::thread([order, rebuild, argv] {
+    order->buildCache(argv[2], rebuild);
+  });
+  std::thread thread3 = std::thread([lineitem, rebuild, argv] {
+    lineitem->buildCache(argv[3], rebuild);
   });
   thread1.join();
   thread2.join();
+  thread3.join();
   auto end = std::chrono::system_clock::now();
   auto dur = end - start;
   auto secs = std::chrono::duration_cast<float_seconds>(dur);
@@ -31,13 +37,13 @@ int main(int argc, char** argv) {
 
   start = std::chrono::system_clock::now();
   for (int i = 0; i < thread_num; i++) {
-    threads[i] = std::thread([leftTable, rightTable, i, round, thread_num, &results, &argv]{
+    threads[i] = std::thread([customer, order, lineitem, i, round, thread_num, &results, &argv]{
       for (int round_id = i; round_id < round; round_id += thread_num) {
         auto mktsegmentCondition = argv[5 + round_id * 4][0];
-        auto orderdateCondition = Executor::DateToInt(argv[5 + round_id * 4 + 1]);
-        auto shipdateCondition = Executor::DateToInt(argv[5 + round_id * 4 + 2]);
+        auto orderdateCondition = util::DateToInt(argv[5 + round_id * 4 + 1]);
+        auto shipdateCondition = util::DateToInt(argv[5 + round_id * 4 + 2]);
         auto topn = std::stoi(argv[5 + round_id * 4 + 3]);
-        auto executor = new Executor(leftTable, rightTable, mktsegmentCondition, orderdateCondition, shipdateCondition, topn);
+        auto executor = new Executor(customer, order, lineitem, mktsegmentCondition, orderdateCondition, shipdateCondition, topn);
         results[round_id] = executor->getResult();
       }
     });
