@@ -8,10 +8,10 @@
 #include <cstring>
 #include <vector>
 
-#include "spp.h"
+#include "phmap.h"
 #include "Tables.h"
 
-using spp::sparse_hash_map;
+using phmap::flat_hash_map;
 
 class Executor {
  private:
@@ -20,7 +20,7 @@ class Executor {
   int* c2Result;
   int* c3Result;
 
-  sparse_hash_map<int, sparse_hash_map<int, int>> result;
+  flat_hash_map<int, flat_hash_map<int, int>> result;
 
  public:
    Executor(Customer* customer, const Order* order, const Lineitem* lineitem,

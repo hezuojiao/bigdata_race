@@ -20,7 +20,7 @@ add_executable(
   src/Tables.cc
 )
 
-include_directories(src/sparsepp)
+include_directories(src/parallel_hashmap)
 
 find_package(Threads REQUIRED)
 target_link_libraries(bigdata_race Threads::Threads)

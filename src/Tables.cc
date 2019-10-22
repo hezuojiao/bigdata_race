@@ -7,23 +7,11 @@
 
 void Customer::buildCache(const char *fileName, bool rebuild) {
   if (rebuild) {
-    auto fd = open(C_MKTSEMENT_PATH.c_str(), O_RDWR | O_CREAT, 0777);
-    fallocate(fd, 0, 0, CUSTOMER_FILE_SIZE);
-    c_mktsegment = (char*)mmap(nullptr, CUSTOMER_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    close(fd);
-
     parseColumns(fileName);
+    serialize();
   } else {
-    auto fd = open(C_MKTSEMENT_PATH.c_str(), O_RDONLY, 0777);
-    c_mktsegment = (char*)mmap(nullptr, CUSTOMER_FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
+    deserialize();
   }
-
-  for (int i = 0; i < CUSTOMER; i++) {
-    c_hashtable[c_mktsegment[i]].insert(i + 1);
-  }
-
-  munmap(c_mktsegment, CUSTOMER_FILE_SIZE);
 }
 
 void Customer::parseColumns(const char *fileName) {
@@ -37,11 +25,32 @@ void Customer::parseColumns(const char *fileName) {
     while (base[pos++] != '|') {}
     char name = base[pos++];
     while (pos < len && base[pos++] != '\n'){}
-    c_mktsegment[position++] = name;
+    c_hashtable[name].insert(++position);
   }
+
   munmap(base, len);
   close(fd);
 }
+
+void Customer::serialize() {
+  for (auto& hs : c_hashtable) {
+    auto dump_file = C_PATH + hs.first;
+    phmap::BinaryOutputArchive ht_dump(dump_file.c_str());
+    hs.second.dump(ht_dump);
+  }
+}
+
+void Customer::deserialize() {
+  for (auto ch : C_KEYS) {
+    auto load_file = C_PATH + ch;
+    phmap::BinaryInputArchive ht_load(load_file.c_str());
+    phmap::flat_hash_set<int> hs;
+    hs.load(ht_load);
+    c_hashtable[ch] = hs;
+  }
+}
+
+
 
 void Order::buildCache(const char *fileName, bool rebuild) {
   if (rebuild) {

@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
   auto order = new Order();
   auto lineitem = new Lineitem();
 
-  bool rebuild = !util::file_exists(C_MKTSEMENT_PATH.c_str());
+  bool rebuild = !util::file_exists(O_ORDERKEY_PATH.c_str());
   typedef std::chrono::duration<float> float_seconds;
   auto start = std::chrono::system_clock::now();
   std::thread thread1 = std::thread([customer, rebuild, argv] {

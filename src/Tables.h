@@ -5,12 +5,14 @@
 #ifndef BIGDATA_RACE_TABLES_H
 #define BIGDATA_RACE_TABLES_H
 
-#include <spp.h>
+#include "phmap.h"
+#include "phmap_dump.h"
+
 #include "Constants.h"
 #include "Utils.h"
 
-using spp::sparse_hash_map;
-using spp::sparse_hash_set;
+using phmap::flat_hash_map;
+using phmap::flat_hash_set;
 
 class Table {
  public:
@@ -22,13 +24,15 @@ class Table {
 
 class Customer : public Table {
  public:
-  char* c_mktsegment;
-  sparse_hash_map<char, sparse_hash_set<int>> c_hashtable;
+  flat_hash_map<char, flat_hash_set<int>> c_hashtable;
   void parseColumns(const char* fileName) override;
   void buildCache(const char* fileName, bool rebuild) override;
 //  inline sparse_hash_set<int>&operator[](const char key) {
 //    return c_hashtable[key];
 //  };
+ private:
+  void serialize();
+  void deserialize();
 };
 
 class Order : public Table {
