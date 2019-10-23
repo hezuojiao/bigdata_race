@@ -71,6 +71,24 @@ class Executor {
  private:
 
   void executePlan(Customer* customer, const Order* order, const Lineitem* lineitem,
+                    char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
+    auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
+    uint32_t o_pos = 0, l_pos = 0;
+    while (o_pos < ORDER && l_pos < LINEITEM) {
+      if (order->o_orderdate[o_pos] < orderdateCondition) {
+        auto o_key = order->o_orderkey[o_pos];
+        while (lineitem->l_orderkey[l_pos] < o_key) {++l_pos;}
+        while (l_pos < LINEITEM && lineitem->l_orderkey[l_pos] == o_key) {
+          if (lineitem->l_shipdate[l_pos] > shipdateCondition && c_custkey.find(order->o_custkey[o_pos]) != c_custkey.end())
+            result[order->o_orderdate[o_pos]][o_key] += lineitem->l_extendedprice[l_pos];
+          ++l_pos;
+        }
+      }
+      ++o_pos;
+    }
+  }
+
+  void executePlan2(Customer* customer, const Order* order, const Lineitem* lineitem,
                    char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
 
     auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
@@ -98,24 +116,6 @@ class Executor {
         }
         ++l_pos;
       }
-    }
-  }
-
-  void executePlan2(Customer* customer, const Order* order, const Lineitem* lineitem,
-                    char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
-    auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
-    uint32_t o_pos = 0, l_pos = 0;
-    while (o_pos < ORDER && l_pos < LINEITEM) {
-      if (order->o_orderdate[o_pos] < orderdateCondition && c_custkey.find(order->o_custkey[o_pos]) != c_custkey.end()) {
-        auto o_key = order->o_orderkey[o_pos];
-        while (lineitem->l_orderkey[l_pos] < o_key) {++l_pos;}
-        while (l_pos < LINEITEM && lineitem->l_orderkey[l_pos] == o_key) {
-          if (lineitem->l_shipdate[l_pos] > shipdateCondition)
-            result[order->o_orderdate[o_pos]][o_key] += lineitem->l_extendedprice[l_pos];
-          ++l_pos;
-        }
-      }
-      ++o_pos;
     }
   }
 
