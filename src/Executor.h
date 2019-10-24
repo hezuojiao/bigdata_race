@@ -20,7 +20,7 @@ class Executor {
   int* c2Result;
   int* c3Result;
 
-  flat_hash_map<int, flat_hash_map<int, int>> result;
+  flat_hash_map<uint64_t, int> result;
 
  public:
    Executor(Customer* customer, const Order* order, const Lineitem* lineitem,
@@ -79,8 +79,10 @@ class Executor {
         auto o_key = order->o_orderkey[o_pos];
         while (lineitem->l_orderkey[l_pos] < o_key) {++l_pos;}
         while (l_pos < LINEITEM && lineitem->l_orderkey[l_pos] == o_key) {
-          if (lineitem->l_shipdate[l_pos] > shipdateCondition && c_custkey.find(order->o_custkey[o_pos]) != c_custkey.end())
-            result[order->o_orderdate[o_pos]][o_key] += lineitem->l_extendedprice[l_pos];
+          if (lineitem->l_shipdate[l_pos] > shipdateCondition && c_custkey.find(order->o_custkey[o_pos]) != c_custkey.end()) {
+            uint64_t key = (((uint64_t)o_key)<<32) | (order->o_orderdate[o_pos]);
+            result[key] += lineitem->l_extendedprice[l_pos];
+          }
           ++l_pos;
         }
       }
@@ -112,7 +114,8 @@ class Executor {
         ++l_pos;
       } else {
         if (lineitem->l_shipdate[l_pos] > shipdateCondition) {
-          result[orderdate[o_pos]][o_key] += lineitem->l_extendedprice[l_pos];
+          uint64_t key = (((uint64_t)o_key)<<32) | (order->o_orderdate[o_pos]);
+          result[key] += lineitem->l_extendedprice[l_pos];
         }
         ++l_pos;
       }
@@ -129,50 +132,50 @@ class Executor {
  */
 
   void insertSort() {
-    for (const auto& dateIter : result) {
-      auto orderDate = dateIter.first;
-      for (const auto& keyIter : dateIter.second) {
-        auto orderKey = keyIter.first;
-        auto expenseprice = keyIter.second;
 
-        if (expenseprice < c3Result[topn - 1]) {
-          continue;
-        }
+    for (const auto& iter : result) {
 
-        int i = topn - 1;
-        for (; i > 0; i--) {
-          if (c3Result[i - 1] < expenseprice) {
-            c3Result[i] = c3Result[i - 1];
-            c2Result[i] = c2Result[i - 1];
-            c1Result[i] = c1Result[i - 1];
-          } else {
-            break;
-          }
-        }
-        c3Result[i] = expenseprice;
-        c2Result[i] = orderDate;
-        c1Result[i] = orderKey;
+      auto expenseprice = iter.second;
+
+      if (expenseprice < c3Result[topn - 1]) {
+        continue;
       }
+
+      auto key = iter.first;
+      int i = topn - 1;
+      for (; i > 0; i--) {
+        if (c3Result[i - 1] < expenseprice) {
+          c3Result[i] = c3Result[i - 1];
+          c2Result[i] = c2Result[i - 1];
+          c1Result[i] = c1Result[i - 1];
+        } else {
+          break;
+        }
+      }
+
+      c3Result[i] = expenseprice;
+      c2Result[i] = key & (0xffffffff);
+      c1Result[i] = (key >> 32);
     }
+
   }
 
 
   void heapSort() {
-    for (const auto& dateIter : result) {
-      auto orderDate = dateIter.first;
-      for (const auto& keyIter : dateIter.second) {
-        auto orderKey = keyIter.first;
-        auto expenseprice = keyIter.second;
 
-        if (expenseprice < c3Result[0]) {
-          continue;
-        }
+    for (const auto& iter : result) {
 
-        c3Result[0] = expenseprice;
-        c2Result[0] = orderDate;
-        c1Result[0] = orderKey;
-        adjust(topn);
+      auto expenseprice = iter.second;
+
+      if (expenseprice < c3Result[0]) {
+        continue;
       }
+
+      auto key = iter.first;
+      c3Result[0] = expenseprice;
+      c2Result[0] = key & (0xffffffff);
+      c1Result[0] = (key >> 32);
+      adjust(topn);
     }
 
     for (int i = topn - 1; i > 0; i--) {
