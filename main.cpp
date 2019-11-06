@@ -5,10 +5,7 @@
 
 int main(int argc, char* argv[]) {
 
-  if (mkdir(DATA_PATH.c_str(), 0777) == -1) {
-    printf("LOG :: mkdir %s failed! : Permission denied\n", DATA_PATH.c_str());
-    exit(-1);
-  }
+  mkdir(DATA_PATH.c_str(), 0777);
 
   Customer customer;
   Order order;

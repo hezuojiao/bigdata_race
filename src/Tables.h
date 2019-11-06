@@ -24,7 +24,7 @@ class Table {
 
 class Customer : public Table {
  public:
-  flat_hash_map<char, flat_hash_set<int>> c_hashtable;
+  flat_hash_map<char, flat_hash_set<uint32_t>> c_hashtable;
   void parseColumns(const char* fileName) override;
   void buildCache(const char* fileName, bool rebuild) override;
 //  inline sparse_hash_set<int>&operator[](const char key) {
@@ -37,13 +37,13 @@ class Customer : public Table {
 
 class Order : public Table {
  public:
-  int* o_orderkey;
-  int* o_custkey;
-  int* o_orderdate;
+  uint32_t* o_orderkey;
+  uint32_t* o_custkey;
+  uint32_t* o_orderdate;
   void parseColumns(const char* fileName) override;
   void buildCache(const char* fileName, bool rebuild) override;
  private:
-  inline void addRow(int orderKey, int custKey, int orderDate) {
+  inline void addRow(uint32_t orderKey, uint32_t custKey, uint32_t orderDate) {
     o_orderkey[position] = orderKey;
     o_custkey[position] = custKey;
     o_orderdate[position] = orderDate;
@@ -53,13 +53,13 @@ class Order : public Table {
 
 class Lineitem : public Table {
  public:
-  int* l_orderkey;
-  int* l_shipdate;
-  int* l_extendedprice;
+  uint32_t* l_orderkey;
+  uint32_t* l_shipdate;
+  uint32_t* l_extendedprice;
   void parseColumns(const char* fileName) override;
   void buildCache(const char* fileName, bool rebuild) override;
  public:
-  inline void addRow(int orderKey, int extendedPrice, int shipDate) {
+  inline void addRow(uint32_t orderKey, uint32_t extendedPrice, uint32_t shipDate) {
     l_orderkey[position] = orderKey;
     l_extendedprice[position] = extendedPrice;
     l_shipdate[position] = shipDate;

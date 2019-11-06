@@ -16,11 +16,11 @@ using phmap::flat_hash_map;
 class Executor {
  private:
   int topn;
-  int* c1Result;
-  int* c2Result;
-  int* c3Result;
+  uint32_t* c1Result;
+  uint32_t* c2Result;
+  uint32_t* c3Result;
 
-  flat_hash_map<uint64_t, int> result;
+  flat_hash_map<uint64_t, uint32_t> result;
 
  public:
    Executor(Customer& customer, const Order& order, const Lineitem& lineitem,
@@ -29,12 +29,10 @@ class Executor {
     this->executePlan(customer, order, lineitem, mktsegmentCondition, orderdateCondition, shipdateCondition);
 
     this->topn = topn;
-    this->c1Result = new int[topn];
-    this->c2Result = new int[topn];
-    this->c3Result = new int[topn];
-    memset(c1Result, 0, sizeof(int) * topn);
-    memset(c2Result, 0, sizeof(int) * topn);
-    memset(c3Result, 0, sizeof(int) * topn);
+    this->c1Result = new uint32_t[topn];
+    this->c2Result = new uint32_t[topn];
+    this->c3Result = new uint32_t[topn];
+    memset(c3Result, 0, sizeof(uint32_t) * topn);
   }
 
   ~Executor() {
@@ -58,7 +56,7 @@ class Executor {
     for (int i = 0; i < topn; i++) {
       if (c3Result[i] > 0) {
         pos += sprintf(char_buf + pos,
-                       "%d|%d-%02d-%02d|%.2f\n", c1Result[i],
+                       "%u|%d-%02d-%02d|%.2f\n", c1Result[i],
                        c2Result[i] / 10000, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
                        (double) c3Result[i] / 100.0);
       } else {
@@ -73,7 +71,7 @@ class Executor {
   void executePlan(Customer& customer, const Order& order, const Lineitem& lineitem,
                     char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
     auto &c_custkey = customer.c_hashtable[mktsegmentCondition];
-    size_t o_pos = 0, l_pos = 0;
+    uint32_t o_pos = 0, l_pos = 0;
     while (o_pos < ORDER && l_pos < LINEITEM) {
       if (order.o_orderdate[o_pos] < orderdateCondition) {
         auto o_key = order.o_orderkey[o_pos];
@@ -94,8 +92,8 @@ class Executor {
                    char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
 
     auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
-    std::vector<int> orderkey; orderkey.reserve(15000000);
-    std::vector<int> orderdate; orderdate.reserve(15000000);
+    std::vector<uint32_t> orderkey; orderkey.reserve(15000000);
+    std::vector<uint32_t> orderdate; orderdate.reserve(15000000);
 
     for (int i = 0; i < ORDER; i++) {  // filter and hash join
       if (order->o_orderdate[i] < orderdateCondition && c_custkey.find(order->o_custkey[i]) != c_custkey.end()) {

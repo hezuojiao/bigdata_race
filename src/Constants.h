@@ -6,12 +6,12 @@
 #define BIGDATA_RACE_CONSTANTS_H
 
 
-const size_t CUSTOMER = 75000000;
-const size_t ORDER    = 750000000;
-const size_t LINEITEM = 3000028242;
+const uint32_t CUSTOMER = 75000000;
+const uint32_t ORDER    = 750000000;
+const uint32_t LINEITEM = 3000028242;
 
-const size_t ORDER_FILE_SIZE    = ORDER * sizeof(int);
-const size_t LINEITEM_FILE_SIZE = LINEITEM * sizeof(int);
+const size_t ORDER_FILE_SIZE    = ORDER * sizeof(uint32_t);
+const size_t LINEITEM_FILE_SIZE = LINEITEM * sizeof(uint32_t);
 
 const std::string DATA_PATH = "/data/team_database/";
 
