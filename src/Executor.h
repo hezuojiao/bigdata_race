@@ -73,7 +73,7 @@ class Executor {
   void executePlan(Customer& customer, const Order& order, const Lineitem& lineitem,
                     char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
     auto &c_custkey = customer.c_hashtable[mktsegmentCondition];
-    uint32_t o_pos = 0, l_pos = 0;
+    size_t o_pos = 0, l_pos = 0;
     while (o_pos < ORDER && l_pos < LINEITEM) {
       if (order.o_orderdate[o_pos] < orderdateCondition) {
         auto o_key = order.o_orderkey[o_pos];
