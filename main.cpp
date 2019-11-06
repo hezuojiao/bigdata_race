@@ -5,6 +5,10 @@
 
 int main(int argc, char* argv[]) {
 
+  if (mkdir(DATA_PATH.c_str(), 0777) == -1) {
+    exit(-1);
+  }
+
   Customer customer;
   Order order;
   Lineitem lineitem;
