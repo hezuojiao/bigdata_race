@@ -42,12 +42,19 @@ void Customer::serialize() {
 }
 
 void Customer::deserialize() {
-  for (auto ch : C_KEYS) {
-    auto load_file = C_PATH + ch;
-    phmap::BinaryInputArchive ht_load(load_file.c_str());
-    phmap::flat_hash_set<uint32_t> hs;
-    hs.load(ht_load);
-    c_hashtable[ch] = hs;
+  c_hashtable.reserve(5);
+  std::thread loader[5];
+  for (int i = 0; i < 5; ++i) {
+    loader[i] = std::thread([i, this]{
+      auto load_file = C_PATH + C_KEYS[i];
+      phmap::BinaryInputArchive ht_load(load_file.c_str());
+      phmap::flat_hash_set<uint32_t> hs;
+      hs.load(ht_load);
+      c_hashtable[C_KEYS[i]] = hs;
+    });
+  }
+  for (auto &t : loader) {
+    t.join();
   }
 }
 

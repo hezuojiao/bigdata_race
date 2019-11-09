@@ -5,6 +5,8 @@
 #ifndef BIGDATA_RACE_TABLES_H
 #define BIGDATA_RACE_TABLES_H
 
+#include <thread>
+
 #include "phmap.h"
 #include "phmap_dump.h"
 
