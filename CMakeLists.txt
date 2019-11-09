@@ -20,6 +20,10 @@ add_executable(
   src/Tables.cc
 )
 
+add_executable(
+  readfile test/test_readfile.cc
+)
+
 include_directories(src/parallel_hashmap)
 
 find_package(Threads REQUIRED)
