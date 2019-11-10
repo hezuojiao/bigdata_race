@@ -37,7 +37,7 @@ class Order : public Table {
  public:
   uint32_t** o_orderkey;
   uint32_t** o_custkey;
-  uint32_t** o_orderdate;
+  uint16_t** o_orderdate;
   void parseColumns(const char* fileName) override;
   void buildCache(const char* fileName, bool rebuild) override;
 };
@@ -46,7 +46,7 @@ class Lineitem : public Table {
  public:
   uint32_t** l_orderkey;
   uint32_t** l_extendedprice;
-  uint32_t** l_shipdate;
+  uint16_t** l_shipdate;
   void parseColumns(const char* fileName) override;
   void buildCache(const char* fileName, bool rebuild) override;
 };

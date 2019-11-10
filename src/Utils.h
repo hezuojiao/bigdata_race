@@ -29,12 +29,8 @@ static inline size_t file_size(const char *file_name) {
   return size;
 }
 
-static inline int DateToInt(const char* date) {
-  int i_date = 0;
-  for (int i = 0; date[i] != '\0'; i++) {
-    i_date = date[i] != '-' ? i_date * 10 + date[i] - '0' : i_date;
-  }
-  return i_date;
+static inline uint16_t DateToInt(const char* date) {
+  return (date[3] - '2') * 10000 + (date[5] - '0') * 1000 + (date[6] - '0') * 100 + (date[8] - '0') * 10 + date[9] - '0';
 }
 
 static inline char IntToChar(int i) {

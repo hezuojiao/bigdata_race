@@ -18,20 +18,20 @@ class Executor {
   Customer* customer;
   const Order* order;
   const Lineitem* lineitem;
-  const uint32_t orderdateCondition;
-  const uint32_t shipdateCondition;
+  const uint16_t orderdateCondition;
+  const uint16_t shipdateCondition;
   const uint16_t topn;
   const char mktsegmentCondition;
 
   uint32_t* c1Result;
-  uint32_t* c2Result;
+  uint16_t* c2Result;
   uint32_t* c3Result;
 
   std::vector<flat_hash_map<uint64_t, uint32_t>> results;
 
  public:
    Executor(Customer* customer, Order* order, Lineitem* lineitem,
-      char mktsegmentCondition, uint32_t orderdateCondition, uint32_t shipdateCondition, uint16_t topn) :
+      char mktsegmentCondition, uint16_t orderdateCondition, uint16_t shipdateCondition, uint16_t topn) :
       customer(customer), order(order), lineitem(lineitem),
       orderdateCondition(orderdateCondition), shipdateCondition(shipdateCondition), topn(topn), mktsegmentCondition(mktsegmentCondition) {
 
@@ -43,7 +43,7 @@ class Executor {
      }
 
      this->c1Result = new uint32_t[topn];
-     this->c2Result = new uint32_t[topn];
+     this->c2Result = new uint16_t[topn];
      this->c3Result = new uint32_t[topn];
      memset(c3Result, 0, sizeof(uint32_t) * topn);
 
@@ -73,8 +73,8 @@ class Executor {
     for (int i = 0; i < topn; i++) {
       if (c3Result[i] > 0) {
         pos += sprintf(char_buf + pos,
-                       "%u|%d-%02d-%02d|%.2f\n", c1Result[i],
-                       c2Result[i] / 10000, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
+                       "%u|199%d-%02d-%02d|%.2f\n", c1Result[i],
+                       c2Result[i] / 10000 + 2, (c2Result[i] % 10000) / 100, c2Result[i] % 100,
                        (double) c3Result[i] / 100.0);
       } else {
         break;

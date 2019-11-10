@@ -63,7 +63,7 @@ void Customer::deserialize() {
 void Order::buildCache(const char *fileName, bool rebuild) {
   o_orderkey  = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
   o_custkey   = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
-  o_orderdate = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
+  o_orderdate = (uint16_t**)malloc(sizeof(uint16_t*) * MAX_CORE_NUM);
   if (rebuild) {
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
       auto fd = open((O_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
@@ -78,7 +78,7 @@ void Order::buildCache(const char *fileName, bool rebuild) {
 
       fd = open((O_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
       fallocate(fd, 0, 0, ORDER_FILE_SIZE);
-      o_orderdate[i] = (uint32_t *) mmap(nullptr, ORDER_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      o_orderdate[i] = (uint16_t *) mmap(nullptr, ORDER_FILE_SIZE/2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
     }
 
@@ -94,7 +94,7 @@ void Order::buildCache(const char *fileName, bool rebuild) {
       close(fd);
 
       fd = open((O_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      o_orderdate[i] = (uint32_t *) mmap(nullptr, ORDER_FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
+      o_orderdate[i] = (uint16_t *) mmap(nullptr, ORDER_FILE_SIZE/2, PROT_READ, MAP_PRIVATE, fd, 0);
       close(fd);
     }
   }
@@ -106,7 +106,8 @@ void Order::parseColumns(const char *fileName) {
   uint32_t idx[MAX_CORE_NUM] = { 0 };
   char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
   posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
-  uint32_t orderKey, custKey, orderDate;
+  uint32_t orderKey, custKey;
+  uint16_t orderDate;
   while (pos < len) {
     orderKey = 0;
     while (base[pos] != '|') {
@@ -119,14 +120,8 @@ void Order::parseColumns(const char *fileName) {
       custKey = custKey * 10 + base[pos] - '0';
       ++pos;
     }
-    ++pos;
-    orderDate = 0;
-    while (pos < len && base[pos] != '\n') {
-      if (base[pos] != '-')
-        orderDate = orderDate * 10 + base[pos] - '0';
-      ++pos;
-    }
-    ++pos;
+    orderDate = util::DateToInt(base + pos + 1);
+    pos += 12;
     auto p = util::partition(orderKey);
     auto i = idx[p]++;
     o_orderkey[p][i] = orderKey;
@@ -142,7 +137,7 @@ void Order::parseColumns(const char *fileName) {
 void Lineitem::buildCache(const char *fileName, bool rebuild) {
   l_orderkey      = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
   l_extendedprice = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
-  l_shipdate      = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
+  l_shipdate      = (uint16_t**)malloc(sizeof(uint16_t*) * MAX_CORE_NUM);
   if (rebuild) {
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
 
@@ -160,7 +155,7 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
 
       fd = open((L_SHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
       fallocate(fd, 0, 0, FILE_SIZE);
-      l_shipdate[i] = (uint32_t *) mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      l_shipdate[i] = (uint16_t *) mmap(nullptr, FILE_SIZE/2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
     }
 
@@ -179,7 +174,7 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
       close(fd);
 
       fd = open((L_SHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      l_shipdate[i] = (uint32_t *) mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
+      l_shipdate[i] = (uint16_t *) mmap(nullptr, FILE_SIZE/2, PROT_READ, MAP_PRIVATE, fd, 0);
       close(fd);
     }
 
@@ -192,7 +187,8 @@ void Lineitem::parseColumns(const char *fileName) {
   uint32_t idx[MAX_CORE_NUM] = { 0 };
   char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
   posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
-  uint32_t orderKey, extendedPrice, shipDate;
+  uint32_t orderKey, extendedPrice;
+  uint16_t shipDate;
   while (pos < len) {
     orderKey = 0;
     while (base[pos] != '|') {
@@ -205,14 +201,8 @@ void Lineitem::parseColumns(const char *fileName) {
         extendedPrice = extendedPrice * 10 + base[pos] - '0';
       ++pos;
     }
-    ++pos;
-    shipDate = 0;
-    while (pos < len && base[pos] != '\n') {
-      if (base[pos] != '-')
-        shipDate = shipDate * 10 + base[pos] - '0';
-      ++pos;
-    }
-    ++pos;
+    shipDate = util::DateToInt(base + pos + 1);
+    pos += 12;
     auto p = util::partition(orderKey);
     auto i = idx[p]++;
     l_orderkey[p][i] = orderKey;

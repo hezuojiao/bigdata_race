@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
   auto secs = std::chrono::duration_cast<float_seconds>(dur);
   printf("LOG :: build spend: %fs\n", secs.count());
 
+  start = std::chrono::system_clock::now();
   auto round = std::stoi(argv[4]);
   for (int i = 0; i < round; ++i) {
     auto mktsegmentCondition = argv[5 + i * 4][0];
