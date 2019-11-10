@@ -77,7 +77,7 @@ void Order::buildCache(const char *fileName, bool rebuild) {
       close(fd);
 
       fd = open((O_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, ORDER_FILE_SIZE);
+      fallocate(fd, 0, 0, ORDER_FILE_SIZE/2);
       o_orderdate[i] = (uint16_t *) mmap(nullptr, ORDER_FILE_SIZE/2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
     }
@@ -154,7 +154,7 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
       close(fd);
 
       fd = open((L_SHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, FILE_SIZE);
+      fallocate(fd, 0, 0, FILE_SIZE/2);
       l_shipdate[i] = (uint16_t *) mmap(nullptr, FILE_SIZE/2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
     }
