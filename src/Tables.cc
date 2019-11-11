@@ -4,110 +4,69 @@
 
 #include "Tables.h"
 
-
-void Customer::buildCache(const char *fileName, bool rebuild) {
+void Order::buildCache(const char* c_filename, const char* o_filename, bool rebuild) {
+  o_orderkey  = (uint32_t***)malloc(sizeof(uint32_t**) * MAX_KEYS_NUM);
+  o_orderdate = (uint16_t***)malloc(sizeof(uint16_t**) * MAX_KEYS_NUM);
   if (rebuild) {
-    parseColumns(fileName);
-    serialize();
+    for (int idx = 0; idx < MAX_KEYS_NUM; ++idx) {
+      o_orderkey[idx] = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
+      o_orderdate[idx] = (uint16_t**)malloc(sizeof(uint16_t*) * MAX_CORE_NUM);
+      for (int i = 0; i < MAX_CORE_NUM; ++i) {
+        auto fd = open((O_ORDERKEY_PATH + util::IntToChar(i + idx * MAX_CORE_NUM)).c_str(), O_RDWR | O_CREAT, 0777);
+        fallocate(fd, 0, 0, ORDER * sizeof(uint32_t));
+        o_orderkey[idx][i] = (uint32_t *) mmap(nullptr, ORDER * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        close(fd);
+
+        fd = open((O_ORDERDATE_PATH + util::IntToChar(i + idx * MAX_CORE_NUM)).c_str(), O_RDWR | O_CREAT, 0777);
+        fallocate(fd, 0, 0, ORDER * sizeof(uint16_t));
+        o_orderdate[idx][i] = (uint16_t *) mmap(nullptr, ORDER * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        close(fd);
+      }
+    }
+    parseColumns(c_filename, o_filename);
   } else {
-    deserialize();
+    for (int idx = 0; idx < MAX_KEYS_NUM; ++idx) {
+      o_orderkey[idx] = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
+      o_orderdate[idx] = (uint16_t**)malloc(sizeof(uint16_t*) * MAX_CORE_NUM);
+      for (int i = 0; i < MAX_CORE_NUM; ++i) {
+        auto fd = open((O_ORDERKEY_PATH + util::IntToChar(i + idx * MAX_CORE_NUM)).c_str(), O_RDONLY, 0777);
+        o_orderkey[idx][i] = (uint32_t *) mmap(nullptr, ORDER * sizeof(uint32_t), PROT_READ, MAP_PRIVATE, fd, 0);
+        close(fd);
+
+        fd = open((O_ORDERDATE_PATH + util::IntToChar(i + idx * MAX_CORE_NUM)).c_str(), O_RDONLY, 0777);
+        o_orderdate[idx][i] = (uint16_t *) mmap(nullptr, ORDER * sizeof(uint16_t), PROT_READ, MAP_PRIVATE, fd, 0);
+        close(fd);
+      }
+    }
   }
 }
 
-void Customer::parseColumns(const char *fileName) {
-  auto fd = open(fileName, O_RDONLY , 0777);
+void Order::parseColumns(const char *c_filename, const char *o_filename) {
 
-  size_t len = util::file_size(fileName), pos = 0;
+  auto fd = open(c_filename, O_RDONLY , 0777);
+  char* c_hashtable = (char*) malloc((CUSTOMER + 1) * sizeof(char));
+  size_t len = util::file_size(c_filename), pos = 0;
   uint32_t c_custkey = 0;
-
   char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
   posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
   while (pos < len) {
     while (base[pos++] != '|') {}
     char name = base[pos++];
     while (pos < len && base[pos++] != '\n'){}
-    c_hashtable[name].insert(++c_custkey);
+    c_hashtable[++c_custkey] = name;
   }
 
   munmap(base, len);
   close(fd);
-}
 
-void Customer::serialize() {
-  for (auto& hs : c_hashtable) {
-    auto dump_file = C_PATH + hs.first;
-    phmap::BinaryOutputArchive ht_dump(dump_file.c_str());
-    hs.second.dump(ht_dump);
-  }
-}
-
-void Customer::deserialize() {
-  c_hashtable.reserve(5);
-  std::thread loader[5];
-  for (int i = 0; i < 5; ++i) {
-    loader[i] = std::thread([i, this]{
-      auto load_file = C_PATH + C_KEYS[i];
-      phmap::BinaryInputArchive ht_load(load_file.c_str());
-      phmap::flat_hash_set<uint32_t> hs;
-      hs.load(ht_load);
-      c_hashtable[C_KEYS[i]] = hs;
-    });
-  }
-  for (auto &t : loader) {
-    t.join();
-  }
-}
-
-
-
-void Order::buildCache(const char *fileName, bool rebuild) {
-  o_orderkey  = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
-  o_custkey   = (uint32_t**)malloc(sizeof(uint32_t*) * MAX_CORE_NUM);
-  o_orderdate = (uint16_t**)malloc(sizeof(uint16_t*) * MAX_CORE_NUM);
-  if (rebuild) {
-    for (int i = 0; i < MAX_CORE_NUM; ++i) {
-      auto fd = open((O_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, ORDER_FILE_SIZE);
-      o_orderkey[i] = (uint32_t *) mmap(nullptr, ORDER_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      close(fd);
-
-      fd = open((O_CUSTKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, ORDER_FILE_SIZE);
-      o_custkey[i] = (uint32_t *) mmap(nullptr, ORDER_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      close(fd);
-
-      fd = open((O_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, ORDER_FILE_SIZE/2);
-      o_orderdate[i] = (uint16_t *) mmap(nullptr, ORDER_FILE_SIZE/2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      close(fd);
-    }
-
-    parseColumns(fileName);
-  } else {
-    for (int i = 0; i < MAX_CORE_NUM; ++i) {
-      auto fd = open((O_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      o_orderkey[i] = (uint32_t *) mmap(nullptr, ORDER_FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
-      close(fd);
-
-      fd = open((O_CUSTKEY_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      o_custkey[i] = (uint32_t *) mmap(nullptr, ORDER_FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
-      close(fd);
-
-      fd = open((O_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      o_orderdate[i] = (uint16_t *) mmap(nullptr, ORDER_FILE_SIZE/2, PROT_READ, MAP_PRIVATE, fd, 0);
-      close(fd);
-    }
-  }
-}
-
-void Order::parseColumns(const char *fileName) {
-  auto fd = open(fileName, O_RDONLY, 0777);
-  size_t len = util::file_size(fileName), pos = 0;
-  uint32_t idx[MAX_CORE_NUM] = { 0 };
-  char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
+  fd = open(o_filename, O_RDONLY, 0777);
+  len = util::file_size(o_filename), pos = 0;
+  uint32_t idx[MAX_KEYS_NUM][MAX_CORE_NUM] = { 0 };
+  base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, fd, 0);
   posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
   uint32_t orderKey, custKey;
   uint16_t orderDate;
+
   while (pos < len) {
     orderKey = 0;
     while (base[pos] != '|') {
@@ -122,13 +81,19 @@ void Order::parseColumns(const char *fileName) {
     }
     orderDate = util::DateToInt(base + pos + 1);
     pos += 12;
+    auto q = util::get_key_index(c_hashtable[custKey]);
     auto p = util::partition(orderKey);
-    auto i = idx[p]++;
-    o_orderkey[p][i] = orderKey;
-    o_custkey[p][i] = custKey;
-    o_orderdate[p][i] = orderDate;
+    auto i = ++idx[q][p];
+    o_orderkey[q][p][i] = orderKey;
+    o_orderdate[q][p][i] = orderDate;
   }
 
+  for (int i = 0; i < MAX_KEYS_NUM; ++i)
+    for (int j = 0; j < MAX_CORE_NUM; ++j) {
+      o_orderkey[i][j][0] = idx[i][j];
+    }
+
+  free(c_hashtable);
   munmap(base, len);
   close(fd);
 }
@@ -141,21 +106,19 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
   if (rebuild) {
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
 
-      size_t FILE_SIZE = LINEITEMS[i] * sizeof(uint32_t);
-
       auto fd = open((L_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, FILE_SIZE);
-      l_orderkey[i] = (uint32_t *) mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      fallocate(fd, 0, 0, LINEITEM * sizeof(uint32_t));
+      l_orderkey[i] = (uint32_t *) mmap(nullptr, LINEITEM * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
 
       fd = open((L_EXTENDEDPRICE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, FILE_SIZE);
-      l_extendedprice[i] = (uint32_t *) mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      fallocate(fd, 0, 0, LINEITEM * sizeof(uint32_t));
+      l_extendedprice[i] = (uint32_t *) mmap(nullptr, LINEITEM * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
 
       fd = open((L_SHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-      fallocate(fd, 0, 0, FILE_SIZE/2);
-      l_shipdate[i] = (uint16_t *) mmap(nullptr, FILE_SIZE/2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      fallocate(fd, 0, 0, LINEITEM * sizeof(uint16_t));
+      l_shipdate[i] = (uint16_t *) mmap(nullptr, LINEITEM * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
       close(fd);
     }
 
@@ -163,18 +126,16 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
   } else {
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
 
-      size_t FILE_SIZE = LINEITEMS[i] * sizeof(uint32_t);
-
       auto fd = open((L_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      l_orderkey[i] = (uint32_t *) mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
+      l_orderkey[i] = (uint32_t *) mmap(nullptr, LINEITEM * sizeof(uint32_t), PROT_READ, MAP_PRIVATE, fd, 0);
       close(fd);
 
       fd = open((L_EXTENDEDPRICE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      l_extendedprice[i] = (uint32_t *) mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
+      l_extendedprice[i] = (uint32_t *) mmap(nullptr, LINEITEM * sizeof(uint32_t), PROT_READ, MAP_PRIVATE, fd, 0);
       close(fd);
 
       fd = open((L_SHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
-      l_shipdate[i] = (uint16_t *) mmap(nullptr, FILE_SIZE/2, PROT_READ, MAP_PRIVATE, fd, 0);
+      l_shipdate[i] = (uint16_t *) mmap(nullptr, LINEITEM * sizeof(uint16_t), PROT_READ, MAP_PRIVATE, fd, 0);
       close(fd);
     }
 
@@ -204,10 +165,14 @@ void Lineitem::parseColumns(const char *fileName) {
     shipDate = util::DateToInt(base + pos + 1);
     pos += 12;
     auto p = util::partition(orderKey);
-    auto i = idx[p]++;
+    auto i = ++idx[p];
     l_orderkey[p][i] = orderKey;
     l_extendedprice[p][i] = extendedPrice;
     l_shipdate[p][i] = shipDate;
+  }
+
+  for (int i = 0; i < MAX_CORE_NUM; ++i) {
+    l_orderkey[i][0] = idx[i];
   }
   munmap(base, len);
   close(fd);

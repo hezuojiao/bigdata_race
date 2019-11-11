@@ -15,13 +15,12 @@ using phmap::flat_hash_map;
 
 class Executor {
  private:
-  Customer* customer;
-  const Order* order;
   const Lineitem* lineitem;
+  uint32_t** o_orderkey;
+  uint16_t** o_orderdate;
   const uint16_t orderdateCondition;
   const uint16_t shipdateCondition;
   const uint16_t topn;
-  const char mktsegmentCondition;
 
   uint32_t* c1Result;
   uint16_t* c2Result;
@@ -30,10 +29,10 @@ class Executor {
   std::vector<flat_hash_map<uint64_t, uint32_t>> results;
 
  public:
-   Executor(Customer* customer, Order* order, Lineitem* lineitem,
-      char mktsegmentCondition, uint16_t orderdateCondition, uint16_t shipdateCondition, uint16_t topn) :
-      customer(customer), order(order), lineitem(lineitem),
-      orderdateCondition(orderdateCondition), shipdateCondition(shipdateCondition), topn(topn), mktsegmentCondition(mktsegmentCondition) {
+   Executor(Lineitem* lineitem, uint32_t** o_orderkey, uint16_t** o_orderdate,
+      uint16_t orderdateCondition, uint16_t shipdateCondition, uint16_t topn) :
+      lineitem(lineitem), o_orderkey(o_orderkey), o_orderdate(o_orderdate),
+      orderdateCondition(orderdateCondition), shipdateCondition(shipdateCondition), topn(topn) {
 
      std::thread threads[MAX_CORE_NUM];
      results.reserve(MAX_CORE_NUM);
@@ -86,16 +85,17 @@ class Executor {
  private:
 
   void executePlan(int thread_id) {
-    auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
-    uint32_t o_pos = 0, l_pos = 0;
-    while (o_pos < ORDER && l_pos < LINEITEMS[thread_id]) {
-      if (order->o_orderdate[thread_id][o_pos] < orderdateCondition) {
-        auto o_key = order->o_orderkey[thread_id][o_pos];
+
+    uint32_t o_end = o_orderkey[thread_id][0], l_end = lineitem->l_orderkey[thread_id][0];
+
+    uint32_t o_pos = 1, l_pos = 1;
+    while (o_pos <= o_end && l_pos <= l_end) {
+      if (o_orderdate[thread_id][o_pos] < orderdateCondition) {
+        auto o_key = o_orderkey[thread_id][o_pos];
         while (lineitem->l_orderkey[thread_id][l_pos] < o_key) {++l_pos;}
-        while (l_pos < LINEITEMS[thread_id] && lineitem->l_orderkey[thread_id][l_pos] == o_key) {
-          if (lineitem->l_shipdate[thread_id][l_pos] > shipdateCondition
-          && c_custkey.find(order->o_custkey[thread_id][o_pos]) != c_custkey.end()) {
-            uint64_t key = (((uint64_t)o_key)<<32) | (order->o_orderdate[thread_id][o_pos]);
+        while (l_pos <= l_end && lineitem->l_orderkey[thread_id][l_pos] == o_key) {
+          if (lineitem->l_shipdate[thread_id][l_pos] > shipdateCondition) {
+            uint64_t key = (((uint64_t)o_key)<<32) | (o_orderdate[thread_id][o_pos]);
             results[thread_id][key] += lineitem->l_extendedprice[thread_id][l_pos];
           }
           ++l_pos;
@@ -105,32 +105,34 @@ class Executor {
     }
   }
 
-//  void executePlan(Customer* customer, const Order* order, const Lineitem* lineitem,
-//                   char mktsegmentCondition, int orderdateCondition, int shipdateCondition) {
 //
-//    auto &c_custkey = customer->c_hashtable[mktsegmentCondition];
-//    std::vector<uint32_t> orderkey; orderkey.reserve(15000000);
-//    std::vector<uint32_t> orderdate; orderdate.reserve(15000000);
+//  void executePlan(int thread_id) {
 //
-//    for (int i = 0; i < ORDER; i++) {  // filter and hash join
-//      if (order->o_orderdate[i] < orderdateCondition && c_custkey.find(order->o_custkey[i]) != c_custkey.end()) {
-//        orderkey.push_back(order->o_orderkey[i]);
-//        orderdate.push_back(order->o_orderdate[i]);
+//    uint32_t o_end = o_orderkey[thread_id][0], l_end = lineitem->l_orderkey[thread_id][0];
+//
+//    std::vector<uint32_t> orderkey;
+//    orderkey.reserve(2000000);
+//    std::vector<uint16_t> orderdate;
+//    orderdate.reserve(2000000);
+//
+//    for (uint32_t i = 1; i <= o_end; i++) {
+//      if (o_orderdate[thread_id][i] < orderdateCondition) {
+//        orderkey.push_back(o_orderkey[thread_id][i]);
+//        orderdate.push_back((o_orderdate[thread_id][i]));
 //      }
 //    }
-//
-//    uint32_t o_pos = 0, l_pos = 0, n1 = orderkey.size();
-//    while (o_pos < n1 && l_pos < LINEITEM) { // sort merge join and filter
+//    uint32_t o_pos = 0, l_pos = 1, n1 = orderkey.size();
+//    while (o_pos < n1 && l_pos <= l_end) { // sort merge join and filter
 //      auto o_key = orderkey[o_pos];
-//      auto l_key = lineitem->l_orderkey[l_pos];
+//      auto l_key = lineitem->l_orderkey[thread_id][l_pos];
 //      if (o_key < l_key) {
 //        ++o_pos;
 //      } else if (o_key > l_key) {
 //        ++l_pos;
 //      } else {
-//        if (lineitem->l_shipdate[l_pos] > shipdateCondition) {
-//          uint64_t key = (((uint64_t)o_key)<<32) | (order->o_orderdate[o_pos]);
-//          result[key] += lineitem->l_extendedprice[l_pos];
+//        if (lineitem->l_shipdate[thread_id][l_pos] > shipdateCondition) {
+//          uint64_t key = (((uint64_t) o_key) << 32) | (orderdate[o_pos]);
+//          results[thread_id][key] += lineitem->l_extendedprice[thread_id][l_pos];
 //        }
 //        ++l_pos;
 //      }

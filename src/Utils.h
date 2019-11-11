@@ -18,8 +18,8 @@
 namespace util {
 
 static inline bool file_exists(const char *file_name) {
-  struct stat buffer;
-  return (stat(file_name, &buffer) == 0);
+  struct stat st;
+  return (stat(file_name, &st) == 0);
 }
 
 static inline size_t file_size(const char *file_name) {
@@ -39,6 +39,10 @@ static inline char IntToChar(int i) {
 
 static inline uint32_t partition(uint32_t key) {
   return ((key&0x20)>>2) | (key&0x7);
+}
+
+static inline int get_key_index(const char key) {
+  for (int i = 0; i < MAX_KEYS_NUM; ++i) if (keys[i] == key) return i;
 }
 
 struct PMutex {

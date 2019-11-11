@@ -1540,6 +1540,7 @@ public:
 
     template<typename InputArchive>
     bool load(InputArchive&);
+    bool load(const char* mmap);
 #endif
 
     void rehash(size_t n) {
