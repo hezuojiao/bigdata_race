@@ -105,7 +105,6 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
   l_shipdate      = (uint16_t**)malloc(sizeof(uint16_t*) * MAX_CORE_NUM);
   if (rebuild) {
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
-
       auto fd = open((L_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
       fallocate(fd, 0, 0, LINEITEM * sizeof(uint32_t));
       l_orderkey[i] = (uint32_t *) mmap(nullptr, LINEITEM * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -125,7 +124,6 @@ void Lineitem::buildCache(const char *fileName, bool rebuild) {
     parseColumns(fileName);
   } else {
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
-
       auto fd = open((L_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
       l_orderkey[i] = (uint32_t *) mmap(nullptr, LINEITEM * sizeof(uint32_t), PROT_READ, MAP_PRIVATE, fd, 0);
       close(fd);
