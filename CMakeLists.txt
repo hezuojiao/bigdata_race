@@ -15,16 +15,15 @@ MESSAGE (STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 add_executable(
   bigdata_race main.cpp
   src/Constants.h
-  src/Executor.h
   src/Utils.h
-  src/Tables.cc
+  src/Database.h
+  src/SortEps.h
 )
 
 add_executable(
   readfile test/test_readfile.cc
 )
 
-include_directories(src/parallel_hashmap)
 
 find_package(Threads REQUIRED)
 target_link_libraries(bigdata_race Threads::Threads)

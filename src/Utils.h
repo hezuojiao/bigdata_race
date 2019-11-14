@@ -14,6 +14,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include "Constants.h"
 
 namespace util {
 
@@ -37,21 +38,9 @@ static inline char IntToChar(int i) {
   return i + '0';
 }
 
-static inline uint32_t partition(uint32_t key) {
-  return ((key&0x20)>>2) | (key&0x7);
-}
-
 static inline int get_key_index(const char key) {
   for (int i = 0; i < MAX_KEYS_NUM; ++i) if (keys[i] == key) return i;
 }
-
-struct PMutex {
-  pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
-
-  void lock() { pthread_mutex_lock(&m); }
-
-  void unlock() { pthread_mutex_unlock(&m); }
-};
 
 } // namespace util
 
