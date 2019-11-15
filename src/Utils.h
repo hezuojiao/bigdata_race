@@ -42,6 +42,18 @@ static inline int get_key_index(const char key) {
   for (int i = 0; i < MAX_KEYS_NUM; ++i) if (keys[i] == key) return i;
 }
 
+static inline uint32_t binary_search(const uint32_t* array, uint32_t size, uint32_t target) {
+  uint32_t left = 0, right = size, middle;
+  while (left < right) {
+    middle = left + ((right - left) >> 1);
+    if (array[middle] < target)
+      left = middle + 1;
+    else
+      right = middle;
+  }
+  return right;
+}
+
 } // namespace util
 
 #endif //BIGDATA_RACE_UTILS_H

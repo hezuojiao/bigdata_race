@@ -28,13 +28,15 @@ void readfile(char* fileName) {
   struct stat st;
   stat(fileName, &st);
   size_t len = st.st_size, pos = 0;
+  size_t pp = len/16;
 
   char* base = (char*)mmap(NULL, len, PROT_READ, MAP_SHARED, fd, 0);
   posix_fadvise(fd, 0, len, POSIX_FADV_WILLNEED);
 
-  char c;
-  while (pos < len) {
-    c = base[pos++];
+  for (int i = 1; i < 16; i++) {
+    pos = pp * i;
+    while (base[pos++] != '\n') {}
+    printf("%lu\n", pos);
   }
 
   munmap(base, len);

@@ -5,6 +5,9 @@
 #ifndef BIGDATA_RACE_DATABASE_H
 #define BIGDATA_RACE_DATABASE_H
 
+#include <atomic>
+#include <thread>
+
 #include "Utils.h"
 #include "Constants.h"
 #include "SortEps.h"
@@ -25,12 +28,17 @@ class Database {
   uint32_t* a_orderkey[MAX_KEYS_NUM];
   uint32_t* a_lineitemposition[MAX_KEYS_NUM];
 
+  std::atomic<int> pending;
+
  public:
 
-  Database() {}
+  Database() : pending(0) {}
 
   ~Database() {
 //    munmap
+
+    // wait flush
+    while (pending.load() != 0) {}
   }
 
   void importDB(const char* c_filename, const char* o_filename, const char* l_filename);
@@ -65,7 +73,7 @@ class Database {
 
  private:
 
-  void flush();
+  void flush(int i);
 
   struct MaxHeap {
     uint32_t* c1Result;
@@ -191,6 +199,8 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
 
   } else { // read and process data
 
+    pending = MAX_KEYS_NUM;
+
     auto l_orderkey_fd = open(L_ORDERKEY_PATH.c_str(), O_RDWR | O_CREAT, 0777);
     auto l_extendedprice_fd = open(L_EXTENDEDPRICE_PATH.c_str(), O_RDWR | O_CREAT, 0777);
     auto l_shipdate_fd = open(L_SHIPDATE_PATH.c_str(), O_RDWR | O_CREAT, 0777);
@@ -216,160 +226,211 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
       a_lineitemposition[i] = (uint32_t*) malloc(ORDER * sizeof(uint32_t));
     }
 
-    // process lineitem.txt
+
+    std::thread workers[MAX_CORE_NUM];
+
     auto l_fd = open(l_filename, O_RDONLY, 0777);
-    size_t len = util::file_size(l_filename), pos = 0;
-    char* base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, l_fd, 0);
-    posix_fadvise(l_fd, 0, len, POSIX_FADV_WILLNEED);
-    uint32_t orderKey, extendedPrice, index = 0;
-    uint16_t date;
-    while (pos < len) {
-      orderKey = 0;
-      while (base[pos] != '|') {
-        orderKey = orderKey * 10 + base[pos++] - '0';
-      }
-      ++pos;
-      extendedPrice = 0;
-      while (base[pos] != '|') {
-        if (base[pos] != '.')
-          extendedPrice = extendedPrice * 10 + base[pos] - '0';
-        ++pos;
-      }
-      date = util::DateToInt(base + pos + 1);
-      pos += 12;
-      l_orderkey[index] = orderKey;
-      l_extendedprice[index] = extendedPrice;
-      l_shipdate[index++] = date;
-    }
+    auto c_fd = open(c_filename, O_RDONLY, 0777);
 
-    munmap(base, len);
-    close(l_fd);
+    size_t l_len = util::file_size(l_filename) ;
+    size_t c_len = util::file_size(c_filename);
 
-    // process customer.txt
-    auto c_fd = open(c_filename, O_RDONLY , 0777);
+    char* l_base = (char*)mmap(nullptr, l_len, PROT_READ, MAP_SHARED, l_fd, 0);
+    char* c_base = (char*)mmap(nullptr, c_len, PROT_READ, MAP_SHARED, c_fd, 0);
     char* c_data = (char*) malloc((CUSTOMER + 1) * sizeof(char));
-    len = util::file_size(c_filename), pos = 0;
-    uint32_t custkey = 0;
-    base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, c_fd, 0);
-    posix_fadvise(c_fd, 0, len, POSIX_FADV_WILLNEED);
-    while (pos < len) {
-      while (base[pos++] != '|') {}
-      char name = base[pos++];
-      while (pos < len && base[pos++] != '\n'){}
-      c_data[++custkey] = name;
+
+    posix_fadvise(l_fd, 0, l_len, POSIX_FADV_WILLNEED);
+    posix_fadvise(c_fd, 0, c_len, POSIX_FADV_WILLNEED);
+
+    for (int i = 0; i < MAX_CORE_NUM; ++i) {
+      workers[i] = std::thread([&, i] {
+
+        // process lineitem.txt
+        uint32_t mmap_position;
+        size_t thread_st, thread_ed;
+        mmap_position = L_POSISTIONS[i];
+        thread_st = L_OFFSETS[i];
+        thread_ed = (i == MAX_CORE_NUM - 1) ? l_len : L_OFFSETS[i + 1];
+
+        uint32_t thread_ok, thread_ep;
+        uint16_t thread_sd;
+
+        while (thread_st < thread_ed) {
+          thread_ok = 0;
+          while (l_base[thread_st] != '|') {
+            thread_ok = thread_ok * 10 + l_base[thread_st++] - '0';
+          }
+          ++thread_st;
+          thread_ep = 0;
+          while (l_base[thread_st] != '|') {
+            if (l_base[thread_st] != '.')
+              thread_ep = thread_ep * 10 + l_base[thread_st] - '0';
+            ++thread_st;
+          }
+          thread_sd = util::DateToInt(l_base + thread_st + 1);
+          thread_st += 12;
+          l_orderkey[mmap_position] = thread_ok;
+          l_extendedprice[mmap_position] = thread_ep;
+          l_shipdate[mmap_position++] = thread_sd;
+        }
+
+        // process customer.txt
+        thread_st = C_OFFSETS[i];
+        thread_ed = (i == MAX_CORE_NUM - 1) ? c_len : C_OFFSETS[i + 1];
+
+        uint32_t thread_ck = 0;
+        char thread_name;
+        while (c_base[thread_st] != '|') { // read first custkey.
+          thread_ck = thread_ck * 10 + c_base[thread_st++] - '0';
+        }
+        thread_name = c_base[thread_st + 1];
+        c_data[thread_ck++] = thread_name;
+        while (c_base[thread_st++] != '\n') {}
+
+        while (thread_st < thread_ed) {
+          while (c_base[thread_st++] != '|') {}
+          thread_name = c_base[thread_st++];
+          while (c_base[thread_st++] != '\n') {}
+          c_data[thread_ck++] = thread_name;
+        }
+      });
     }
 
-    munmap(base, len);
+    for (auto &t : workers) {
+      t.join();
+    }
+    munmap(l_base, l_len);
+    munmap(c_base, c_len);
+    close(l_fd);
     close(c_fd);
 
 
     // process orders.txt
     auto o_fd = open(o_filename, O_RDONLY, 0777);
-    len = util::file_size(o_filename), pos = 0;
-    base = (char*)mmap(nullptr, len, PROT_READ, MAP_SHARED, o_fd, 0);
-    posix_fadvise(o_fd, 0, len, POSIX_FADV_WILLNEED);
+    size_t o_len = util::file_size(o_filename);
+    char* o_base = (char*)mmap(nullptr, o_len, PROT_READ, MAP_SHARED, o_fd, 0);
+    posix_fadvise(o_fd, 0, o_len, POSIX_FADV_WILLNEED);
 
-    uint32_t idxes[MAX_KEYS_NUM] = { 0 }, l_position = 0;
-    uint16_t min_shipdate, max_shipdate;
-    uint32_t eps;
+    std::atomic<uint32_t> idxes[MAX_KEYS_NUM];
 
-    while (pos < len) {
-      // read data
-      orderKey = 0;
-      while (base[pos] != '|') {
-        orderKey = orderKey * 10 + base[pos] - '0';
-        ++pos;
-      }
-      ++pos;
-      custkey = 0;
-      while (base[pos] != '|') {
-        custkey = custkey * 10 + base[pos] - '0';
-        ++pos;
-      }
-      date = util::DateToInt(base + pos + 1);
-      pos += 12;
+    for (int i = 0; i < MAX_KEYS_NUM; i++) idxes[i] = 0;
 
-      // find lineitem position
-      if (orderKey != l_orderkey[l_position]) {
-        printf("ERROR   HAHAHAHAHAHHA\n");
-      }
+    for (int i = 0; i < MAX_CORE_NUM; ++i) {
+      workers[i] = std::thread([&, i] {
+        size_t thread_st = O_OFFSETS[i];
+        size_t thread_ed = (i == MAX_CORE_NUM - 1) ? o_len : O_OFFSETS[i + 1];
 
-      auto i = util::get_key_index(c_data[custkey]);
-      auto idx = ++idxes[i];
-      a_orderdate[i][idx] = date;
-      a_orderkey[i][idx] = orderKey;
-      a_lineitemposition[i][idx] = l_position;
-      min_shipdate = max_shipdate = l_shipdate[l_position];
-      eps = l_extendedprice[l_position++];
-      while (orderKey == l_orderkey[l_position]) {
-        if (l_shipdate[l_position] < min_shipdate) min_shipdate = l_shipdate[l_position];
-        if (l_shipdate[l_position] > max_shipdate) max_shipdate = l_shipdate[l_position];
-        eps += l_extendedprice[l_position++];
-      }
+        uint32_t thread_ok = 0, thread_ck, thread_idx, thread_eps;
+        uint16_t thread_od, thread_misd, thread_masd;
 
-      a_minshipdate[i][idx] = min_shipdate;
-      a_maxshipdate[i][idx] = max_shipdate;
-      a_extendedpricesum[i][idx] = eps;
+        // read first orderkey.
+        while (o_base[thread_st] != '|') {
+          thread_ok = thread_ok * 10 + o_base[thread_st++] - '0';
+        }
+
+        uint32_t thread_lpos = util::binary_search(l_orderkey, LINEITEM, thread_ok);
+        thread_st = O_OFFSETS[i]; // reset read position
+
+        while (thread_st < thread_ed) {
+          thread_ok = 0;
+          while (o_base[thread_st] != '|') {
+            thread_ok = thread_ok * 10 + o_base[thread_st++] - '0';
+          }
+          ++thread_st;
+          thread_ck = 0;
+          while (o_base[thread_st] != '|') {
+            thread_ck = thread_ck * 10 + o_base[thread_st++] - '0';
+          }
+
+          thread_od = util::DateToInt(o_base + thread_st + 1);
+          thread_st += 12;
+
+          auto thread_pt = util::get_key_index(c_data[thread_ck]);
+          thread_idx = ++idxes[thread_pt];
+          a_orderdate[thread_pt][thread_idx] = thread_od;
+          a_orderkey[thread_pt][thread_idx] = thread_ok;
+          a_lineitemposition[thread_pt][thread_idx] = thread_lpos;
+          thread_misd = thread_masd = l_shipdate[thread_lpos];
+          thread_eps = l_extendedprice[thread_lpos++];
+          while (thread_ok == l_orderkey[thread_lpos]) {
+            if (l_shipdate[thread_lpos] < thread_misd) thread_misd = l_shipdate[thread_lpos];
+            if (l_shipdate[thread_lpos] > thread_masd) thread_masd = l_shipdate[thread_lpos];
+            thread_eps += l_extendedprice[thread_lpos++];
+          }
+          a_minshipdate[thread_pt][thread_idx] = thread_misd;
+          a_maxshipdate[thread_pt][thread_idx] = thread_masd;
+          a_extendedpricesum[thread_pt][thread_idx] = thread_eps;
+        }
+      });
     }
 
+    for (auto &t : workers) {
+      t.join();
+    }
     for (int i = 0; i < MAX_KEYS_NUM; ++i) {
       a_orderkey[i][0] = idxes[i];
     }
 
     free(c_data);
-    munmap(base, len);
+    munmap(c_base, c_len);
     close(o_fd);
 
+    std::thread sorter[MAX_KEYS_NUM];
     // sort
     for (int i = 0; i < MAX_KEYS_NUM; ++i) {
-      SortEps sortEps(a_extendedpricesum[i], a_orderkey[i], a_lineitemposition[i], a_orderdate[i], a_minshipdate[i], a_maxshipdate[i]);
-      sortEps.quicksort();
+      sorter[i] = std::thread([i, this] {
+        SortEps sortEps(a_extendedpricesum[i], a_orderkey[i], a_lineitemposition[i], a_orderdate[i], a_minshipdate[i], a_maxshipdate[i]);
+        sortEps.quicksort();
+      });
     }
 
-    // flush
-    flush();
+    for (int i = 0; i < MAX_KEYS_NUM; ++i) {
+      sorter[i].join();
+      std::thread([i, this] { flush(i); }).detach();
+    }
   }
 }
 
-void Database::flush() {
-  for (int i = 0; i < MAX_KEYS_NUM; ++i) {
-    auto a_orderdate_fd = open((A_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-    auto a_minshipdate_fd = open((A_MINSHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-    auto a_maxshipdate_fd = open((A_MAXSHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-    auto a_extendedpricesum_fd = open((A_EXTENDEDPRICESUM_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-    auto a_orderkey_fd = open((A_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
-    auto a_lineitemposition_fd = open((A_LINEITEMPOSITION_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
+void Database::flush(int i) {
 
-    auto size = a_orderkey[i][0] + 1;
+  auto a_orderdate_fd = open((A_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
+  auto a_minshipdate_fd = open((A_MINSHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
+  auto a_maxshipdate_fd = open((A_MAXSHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
+  auto a_extendedpricesum_fd = open((A_EXTENDEDPRICESUM_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
+  auto a_orderkey_fd = open((A_ORDERKEY_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
+  auto a_lineitemposition_fd = open((A_LINEITEMPOSITION_PATH + util::IntToChar(i)).c_str(), O_RDWR | O_CREAT, 0777);
 
-    fallocate(a_orderdate_fd, 0, 0, size * sizeof(uint16_t));
-    fallocate(a_minshipdate_fd, 0, 0, size * sizeof(uint16_t));
-    fallocate(a_maxshipdate_fd, 0, 0, size * sizeof(uint16_t));
-    fallocate(a_extendedpricesum_fd, 0, 0, size * sizeof(uint32_t));
-    fallocate(a_orderkey_fd, 0, 0, size * sizeof(uint32_t));
-    fallocate(a_lineitemposition_fd, 0, 0, size * sizeof(uint32_t));
+  auto size = a_orderkey[i][0] + 1;
 
-    auto a_orderdate_mmap = (uint16_t*) mmap(nullptr, size * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_orderdate_fd, 0);
-    auto a_minshipdate_mmap = (uint16_t*) mmap(nullptr, size * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_minshipdate_fd, 0);
-    auto a_maxshipdate_mmap = (uint16_t*) mmap(nullptr, size * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_maxshipdate_fd, 0);
-    auto a_extendedpricesum_mmap = (uint32_t *) mmap(nullptr, size * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_extendedpricesum_fd, 0);
-    auto a_orderkey_mmap = (uint32_t*) mmap(nullptr, size * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_orderkey_fd, 0);
-    auto a_lineitemposition_mmap = (uint32_t*) mmap(nullptr, size * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_lineitemposition_fd, 0);
+  fallocate(a_orderdate_fd, 0, 0, size * sizeof(uint16_t));
+  fallocate(a_minshipdate_fd, 0, 0, size * sizeof(uint16_t));
+  fallocate(a_maxshipdate_fd, 0, 0, size * sizeof(uint16_t));
+  fallocate(a_extendedpricesum_fd, 0, 0, size * sizeof(uint32_t));
+  fallocate(a_orderkey_fd, 0, 0, size * sizeof(uint32_t));
+  fallocate(a_lineitemposition_fd, 0, 0, size * sizeof(uint32_t));
 
-    memcpy(a_orderdate_mmap, a_orderdate[i], size * sizeof(uint16_t));
-    memcpy(a_minshipdate_mmap, a_minshipdate[i], size * sizeof(uint16_t));
-    memcpy(a_maxshipdate_mmap, a_maxshipdate[i], size * sizeof(uint16_t));
-    memcpy(a_extendedpricesum_mmap, a_extendedpricesum[i], size * sizeof(uint32_t));
-    memcpy(a_orderkey_mmap, a_orderkey[i], size * sizeof(uint32_t));
-    memcpy(a_lineitemposition_mmap, a_lineitemposition[i], size * sizeof(uint32_t));
+  auto a_orderdate_mmap = (uint16_t*) mmap(nullptr, size * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_orderdate_fd, 0);
+  auto a_minshipdate_mmap = (uint16_t*) mmap(nullptr, size * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_minshipdate_fd, 0);
+  auto a_maxshipdate_mmap = (uint16_t*) mmap(nullptr, size * sizeof(uint16_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_maxshipdate_fd, 0);
+  auto a_extendedpricesum_mmap = (uint32_t *) mmap(nullptr, size * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_extendedpricesum_fd, 0);
+  auto a_orderkey_mmap = (uint32_t*) mmap(nullptr, size * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_orderkey_fd, 0);
+  auto a_lineitemposition_mmap = (uint32_t*) mmap(nullptr, size * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, a_lineitemposition_fd, 0);
 
-    close(a_orderdate_fd);
-    close(a_minshipdate_fd);
-    close(a_maxshipdate_fd);
-    close(a_extendedpricesum_fd);
-    close(a_orderkey_fd);
-    close(a_lineitemposition_fd);
-  }
+  memcpy(a_orderdate_mmap, a_orderdate[i], size * sizeof(uint16_t));
+  memcpy(a_minshipdate_mmap, a_minshipdate[i], size * sizeof(uint16_t));
+  memcpy(a_maxshipdate_mmap, a_maxshipdate[i], size * sizeof(uint16_t));
+  memcpy(a_extendedpricesum_mmap, a_extendedpricesum[i], size * sizeof(uint32_t));
+  memcpy(a_orderkey_mmap, a_orderkey[i], size * sizeof(uint32_t));
+  memcpy(a_lineitemposition_mmap, a_lineitemposition[i], size * sizeof(uint32_t));
+
+  close(a_orderdate_fd);
+  close(a_minshipdate_fd);
+  close(a_maxshipdate_fd);
+  close(a_extendedpricesum_fd);
+  close(a_orderkey_fd);
+  close(a_lineitemposition_fd);
+
+  --pending;
 }
 
 
