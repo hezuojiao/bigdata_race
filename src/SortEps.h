@@ -38,13 +38,13 @@ class SortEps {
       uint32_t pivotLoc = partition(low, high);
 
       if (sz > MAX_LENGTH_QUICKSORT_ASYNC) {
-        std::async(std::launch::async, [&]() {
-          quicksort(low, pivotLoc - 1);
-        });
+        auto left = std::thread([&] { quicksort(low, pivotLoc - 1);});
+        quicksort(pivotLoc + 1, high);
+        left.join();
       } else {
         quicksort(low, pivotLoc - 1);
+        quicksort(pivotLoc + 1, high);
       }
-      quicksort(pivotLoc + 1, high);
     } else {
       insertSort(low, high);
     }
