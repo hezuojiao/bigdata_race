@@ -27,6 +27,8 @@ const std::string A_LINEITEMPOSITION_PATH = DATA_PATH + "a_lineitemposition-";
 
 const int MAX_LENGTH_INSERT_SORT = 12;
 
+const int MAX_LENGTH_QUICKSORT_ASYNC = 8192;
+
 const int MAX_CORE_NUM = 16;
 
 const int MAX_KEYS_NUM = 5;

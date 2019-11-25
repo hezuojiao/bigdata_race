@@ -5,6 +5,7 @@
 #ifndef BIGDATA_RACE_SORTEPS_H
 #define BIGDATA_RACE_SORTEPS_H
 
+#include <future>
 #include "Constants.h"
 
 class SortEps {
@@ -32,10 +33,17 @@ class SortEps {
 
  private:
   void quicksort(uint32_t low, uint32_t high) {
-    if ((high - low + 1) > MAX_LENGTH_INSERT_SORT) {
+    auto sz = high - low + 1;
+    if (sz > MAX_LENGTH_INSERT_SORT) {
       uint32_t pivotLoc = partition(low, high);
 
-      quicksort(low, pivotLoc - 1);
+      if (sz > MAX_LENGTH_QUICKSORT_ASYNC) {
+        std::async(std::launch::async, [&]() {
+          quicksort(low, pivotLoc - 1);
+        });
+      } else {
+        quicksort(low, pivotLoc - 1);
+      }
       quicksort(pivotLoc + 1, high);
     } else {
       insertSort(low, high);
