@@ -10,14 +10,7 @@ int main(int argc, char* argv[]) {
   Database tpch;
 
   // load
-  typedef std::chrono::duration<float> float_seconds;
-  auto start = std::chrono::system_clock::now();
   tpch.importDB(argv[1], argv[2], argv[3]);
-  auto end = std::chrono::system_clock::now();
-  auto dur = end - start;
-  auto secs = std::chrono::duration_cast<float_seconds>(dur);
-  printf("LOG :: build spend: %fs\n", secs.count());
-
 
   auto round = std::stoi(argv[4]);
   auto thread_num = std::min(MAX_CORE_NUM, round);
@@ -25,7 +18,6 @@ int main(int argc, char* argv[]) {
   char* results[round];
 
   // query
-  start = std::chrono::system_clock::now();
   for (int i = 0; i < thread_num; i++) {
     threads[i] = std::thread([&, i]{
       for (int round_id = i; round_id < round; round_id += thread_num) {
@@ -41,13 +33,10 @@ int main(int argc, char* argv[]) {
   for (auto &t : threads) {
     t.join();
   }
+
   for (auto &r : results) {
     printf("%s", r);
   }
-  end = std::chrono::system_clock::now();
-  dur = end - start;
-  secs = std::chrono::duration_cast<float_seconds>(dur);
-  printf("LOG :: query spend: %fs\n", secs.count());
 
   return 0;
 }

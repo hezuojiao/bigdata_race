@@ -28,7 +28,7 @@ class Database {
   uint32_t* a_orderkey[MAX_KEYS_NUM];
   uint32_t* a_lineitemposition[MAX_KEYS_NUM];
 
-  std::atomic<int> pending;
+  std::atomic<uint8_t> pending;
 
  public:
 
@@ -171,7 +171,6 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
     close(l_extendedprice_fd);
     close(l_shipdate_fd);
 
-
     for (int i = 0; i < MAX_KEYS_NUM; ++i) {
       auto a_orderdate_fd = open((A_ORDERDATE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
       auto a_minshipdate_fd = open((A_MINSHIPDATE_PATH + util::IntToChar(i)).c_str(), O_RDONLY, 0777);
@@ -311,9 +310,7 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
     char* o_base = (char*)mmap(nullptr, o_len, PROT_READ, MAP_SHARED, o_fd, 0);
     posix_fadvise(o_fd, 0, o_len, POSIX_FADV_WILLNEED);
 
-    std::atomic<uint32_t> idxes[MAX_KEYS_NUM];
-
-    for (int i = 0; i < MAX_KEYS_NUM; i++) idxes[i] = 0;
+    std::atomic<uint32_t> idxes[MAX_KEYS_NUM] = {};
 
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
       workers[i] = std::thread([&, i] {
