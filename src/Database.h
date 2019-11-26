@@ -36,7 +36,6 @@ class Database {
 
   ~Database() {
 //    munmap
-
     // wait flush
     while (pending.load() != 0) {}
   }
@@ -58,7 +57,7 @@ class Database {
           uint32_t l_position = a_lineitemposition[p][pos];
           uint32_t joinkey = a_orderkey[p][pos];
           uint32_t eps = 0;
-          while (l_orderkey[l_position] == joinkey) {
+          while (l_position < LINEITEM && l_orderkey[l_position] == joinkey) {
             if (l_shipdate[l_position] > shipdateCondition) {
               eps += l_extendedprice[l_position];
             }
