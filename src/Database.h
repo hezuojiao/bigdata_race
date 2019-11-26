@@ -238,8 +238,6 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
     char* c_base = (char*)mmap(nullptr, c_len, PROT_READ, MAP_SHARED, c_fd, 0);
     char* c_data = (char*) malloc((CUSTOMER + 1) * sizeof(char));
 
-    posix_fadvise(l_fd, 0, l_len, POSIX_FADV_WILLNEED);
-    posix_fadvise(c_fd, 0, c_len, POSIX_FADV_WILLNEED);
 
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
       workers[i] = std::thread([&, i] {
@@ -250,6 +248,7 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
         mmap_position = L_POSISTIONS[i];
         thread_st = L_OFFSETS[i];
         thread_ed = (i == MAX_CORE_NUM - 1) ? l_len : L_OFFSETS[i + 1];
+        madvise(l_base + thread_st, thread_ed - thread_st, MADV_SEQUENTIAL);
 
         uint32_t thread_ok, thread_ep;
         uint16_t thread_sd;
@@ -276,6 +275,7 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
         // process customer.txt
         thread_st = C_OFFSETS[i];
         thread_ed = (i == MAX_CORE_NUM - 1) ? c_len : C_OFFSETS[i + 1];
+        madvise(c_base + thread_st, thread_ed - thread_st, MADV_SEQUENTIAL);
 
         uint32_t thread_ck = 0;
         char thread_name;
@@ -308,7 +308,6 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
     auto o_fd = open(o_filename, O_RDONLY, 0777);
     size_t o_len = util::file_size(o_filename);
     char* o_base = (char*)mmap(nullptr, o_len, PROT_READ, MAP_SHARED, o_fd, 0);
-    posix_fadvise(o_fd, 0, o_len, POSIX_FADV_WILLNEED);
 
     std::atomic<uint32_t> idxes[MAX_KEYS_NUM] = {};
 
@@ -316,6 +315,7 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
       workers[i] = std::thread([&, i] {
         size_t thread_st = O_OFFSETS[i];
         size_t thread_ed = (i == MAX_CORE_NUM - 1) ? o_len : O_OFFSETS[i + 1];
+        madvise(o_base + thread_st, thread_ed - thread_st, MADV_SEQUENTIAL);
 
         uint32_t thread_ok = 0, thread_ck, thread_idx, thread_eps;
         uint16_t thread_od, thread_misd, thread_masd;
@@ -325,7 +325,8 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
           thread_ok = thread_ok * 10 + o_base[thread_st++] - '0';
         }
 
-        uint32_t thread_lpos = util::binary_search(l_orderkey, LINEITEM, thread_ok);
+//        uint32_t thread_lpos = util::binary_search(l_orderkey, LINEITEM, thread_ok);
+        uint32_t thread_lpos = L_POS[i];
         thread_st = O_OFFSETS[i]; // reset read position
 
         while (thread_st < thread_ed) {
