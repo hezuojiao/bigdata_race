@@ -234,9 +234,12 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
     size_t l_len = util::file_size(l_filename) ;
     size_t c_len = util::file_size(c_filename);
 
-    char* l_base = (char*)mmap(nullptr, l_len, PROT_READ, MAP_SHARED, l_fd, 0);
-    char* c_base = (char*)mmap(nullptr, c_len, PROT_READ, MAP_SHARED, c_fd, 0);
+    char* l_base = (char*)mmap(nullptr, l_len, PROT_READ, MAP_PRIVATE, l_fd, 0);
+    char* c_base = (char*)mmap(nullptr, c_len, PROT_READ, MAP_PRIVATE, c_fd, 0);
     char* c_data = (char*) malloc((CUSTOMER + 1) * sizeof(char));
+
+    madvise(l_base, l_len, MADV_SEQUENTIAL);
+    madvise(c_base, c_len, MADV_SEQUENTIAL);
 
 
     for (int i = 0; i < MAX_CORE_NUM; ++i) {
@@ -248,7 +251,6 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
         mmap_position = L_POSISTIONS[i];
         thread_st = L_OFFSETS[i];
         thread_ed = (i == MAX_CORE_NUM - 1) ? l_len : L_OFFSETS[i + 1];
-        madvise(l_base + thread_st, thread_ed - thread_st, MADV_SEQUENTIAL);
 
         uint32_t thread_ok, thread_ep;
         uint16_t thread_sd;
@@ -275,7 +277,6 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
         // process customer.txt
         thread_st = C_OFFSETS[i];
         thread_ed = (i == MAX_CORE_NUM - 1) ? c_len : C_OFFSETS[i + 1];
-        madvise(c_base + thread_st, thread_ed - thread_st, MADV_SEQUENTIAL);
 
         uint32_t thread_ck = 0;
         char thread_name;
@@ -307,7 +308,8 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
     // process orders.txt
     auto o_fd = open(o_filename, O_RDONLY, 0777);
     size_t o_len = util::file_size(o_filename);
-    char* o_base = (char*)mmap(nullptr, o_len, PROT_READ, MAP_SHARED, o_fd, 0);
+    char* o_base = (char*)mmap(nullptr, o_len, PROT_READ, MAP_PRIVATE, o_fd, 0);
+    madvise(o_base, o_len, MADV_SEQUENTIAL);
 
     std::atomic<uint32_t> idxes[MAX_KEYS_NUM] = {};
 
@@ -315,7 +317,6 @@ void Database::importDB(const char *c_filename, const char *o_filename, const ch
       workers[i] = std::thread([&, i] {
         size_t thread_st = O_OFFSETS[i];
         size_t thread_ed = (i == MAX_CORE_NUM - 1) ? o_len : O_OFFSETS[i + 1];
-        madvise(o_base + thread_st, thread_ed - thread_st, MADV_SEQUENTIAL);
 
         uint32_t thread_ok = 0, thread_ck, thread_idx, thread_eps;
         uint16_t thread_od, thread_misd, thread_masd;
